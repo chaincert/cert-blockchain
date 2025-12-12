@@ -1,0 +1,150 @@
+# CERT Blockchain Application Configuration
+# Per Whitepaper Section 4 and Development Plan
+
+###############################################################################
+###                         Base Configuration                              ###
+###############################################################################
+
+# Minimum gas prices for transaction acceptance
+# Per Whitepaper: Gas fees paid in CERT
+minimum-gas-prices = "0.0001ucert"
+
+# Pruning strategy
+pruning = "default"
+
+# Application database backend
+app-db-backend = "goleveldb"
+
+###############################################################################
+###                         Cosmos REST API                                 ###
+###############################################################################
+# Per Development Plan Task 2.5: Port 1317
+
+[api]
+# Enable defines if the API server should be enabled
+enable = true
+
+# Swagger defines if swagger documentation should automatically be registered
+swagger = true
+
+# Address defines the API server to listen on
+address = "tcp://0.0.0.0:1317"
+
+# MaxOpenConnections defines the max number of open connections
+max-open-connections = 1000
+
+# RPCReadTimeout defines the read timeout for the RPC server
+rpc-read-timeout = 10
+
+# RPCWriteTimeout defines the write timeout for the RPC server
+rpc-write-timeout = 10
+
+# RPCMaxBodyBytes defines the max body size for RPC requests
+rpc-max-body-bytes = 1000000
+
+# EnableUnsafeCORS defines if CORS should be enabled (unsafe - use caution)
+enabled-unsafe-cors = true
+
+###############################################################################
+###                         gRPC Configuration                              ###
+###############################################################################
+
+[grpc]
+# Enable defines if the gRPC server should be enabled
+enable = true
+
+# Address defines the gRPC server address to bind to
+address = "0.0.0.0:9090"
+
+# MaxRecvMsgSize defines the max message size in bytes the server can receive
+max-recv-msg-size = "10485760"
+
+# MaxSendMsgSize defines the max message size in bytes the server can send
+max-send-msg-size = "2147483647"
+
+###############################################################################
+###                        gRPC Web Configuration                           ###
+###############################################################################
+
+[grpc-web]
+# Enable defines if the gRPC-web should be enabled
+enable = true
+
+# Address defines the gRPC-web server address to bind to
+address = "0.0.0.0:9091"
+
+###############################################################################
+###                        State Sync Configuration                         ###
+###############################################################################
+
+[state-sync]
+# SnapshotInterval specifies the block interval at which local state sync
+# snapshots are taken
+snapshot-interval = 1000
+
+# SnapshotKeepRecent specifies the number of recent snapshots to keep
+snapshot-keep-recent = 2
+
+###############################################################################
+###                         Ethereum JSON-RPC                               ###
+###############################################################################
+# Per Development Plan Task 2.4: Port 8545
+
+[json-rpc]
+# Enable defines if the JSON-RPC server should be enabled
+enable = true
+
+# Address defines the HTTP server to listen on
+address = "0.0.0.0:8545"
+
+# WsAddress defines the WebSocket server to listen on
+ws-address = "0.0.0.0:8546"
+
+# API defines a list of JSON-RPC namespaces to enable
+api = "eth,txpool,personal,net,debug,web3"
+
+# GasCap sets a cap on gas that can be used in eth_call/estimateGas
+# Per Whitepaper: 25M gas cap for calls
+gas-cap = 25000000
+
+# EVMTimeout is the global timeout for eth_call
+evm-timeout = "5s"
+
+# TxFeeCap is the global tx-fee cap for send transactions
+txfee-cap = 1
+
+# FilterCap sets the limit for max number of filters that can be created
+filter-cap = 200
+
+# FeeHistoryCap sets the limit for fee history that can be returned
+feehistory-cap = 100
+
+# LogsCap defines the max number of results returned from a logs filter query
+logs-cap = 10000
+
+# BlockRangeCap defines the max block range for logs filter queries
+block-range-cap = 10000
+
+# HTTPTimeout is the read/write timeout of http server
+http-timeout = "30s"
+
+# HTTPIdleTimeout is the idle timeout of http server
+http-idle-timeout = "120s"
+
+# AllowUnprotectedTxs restricts unprotected (non EIP155 signed) transactions
+allow-unprotected-txs = false
+
+###############################################################################
+###                            Telemetry                                    ###
+###############################################################################
+
+[telemetry]
+# Enable metrics collection
+enabled = true
+
+# ServiceName defines the prefix for all metrics
+service-name = "certd"
+
+# PrometheusRetentionTime sets the retention time for prometheus metrics
+prometheus-retention-time = 60
+

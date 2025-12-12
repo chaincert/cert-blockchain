@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Node.js
+**/node_modules
+**/npm-debug.log
+**/.npm
+
+# TypeScript build output
+**/dist
+**/*.tsbuildinfo
+
+# Test files
+**/__tests__
+**/*.test.ts
+**/*.test.go
+**/*.spec.ts
+**/coverage
+**/.nyc_output
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Local configs
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+

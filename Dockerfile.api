@@ -1,0 +1,47 @@
+# CERT API Server Dockerfile
+
+# Build stage
+FROM golang:1.21-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache make git gcc musl-dev
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the API server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /cert-api ./cmd/api
+
+# Final stage
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -g 1000 cert && \
+    adduser -u 1000 -G cert -s /bin/sh -D cert
+
+# Copy binary from builder
+COPY --from=builder /cert-api /usr/local/bin/cert-api
+
+# Use non-root user
+USER cert
+
+# Expose API port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/v1/health || exit 1
+
+ENTRYPOINT ["cert-api"]
+

@@ -1,0 +1,26 @@
+{
+  "name": "@certblockchain/contracts-test",
+  "version": "1.0.0",
+  "description": "Unit tests for CERT Blockchain Solidity contracts",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.0",
+    "ethers": "^6.9.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/*.test.ts"],
+    "moduleFileExtensions": ["ts", "js"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "useESM": false }]
+    }
+  }
+}
+

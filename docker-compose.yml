@@ -1,0 +1,126 @@
+# CERT Blockchain Docker Compose Configuration
+# Per Whitepaper Section 8: API Specifications
+
+services:
+  # CERT Blockchain Node
+  certd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: certd
+    ports:
+      # Tendermint RPC
+      - "26657:26657"
+      # Tendermint P2P
+      - "26656:26656"
+      # Cosmos REST API (Per Development Plan 2.5)
+      - "1317:1317"
+      # Cosmos gRPC
+      - "9090:9090"
+      # Ethereum JSON-RPC (Per Development Plan 2.4)
+      - "8545:8545"
+      # Ethereum WebSocket
+      - "8546:8546"
+    volumes:
+      - certd-data:/root/.certd
+    environment:
+      - CERT_CHAIN_ID=951753
+      - CERT_MONIKER=cert-node-1
+    networks:
+      - cert-network
+    restart: unless-stopped
+
+  # PostgreSQL Database for CertID
+  # Per Development Plan Phase 2: user_profiles database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cert-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cert
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-certpass}
+      POSTGRES_DB: certid
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./api/database/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - cert-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cert -d certid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CERT API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: cert-api
+    ports:
+      # Custom REST API (Per Development Plan 2.1)
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgres://cert:${POSTGRES_PASSWORD:-certpass}@postgres:5432/certid?sslmode=disable
+      - CHAIN_RPC_URL=http://certd:26657
+      - EVM_RPC_URL=http://certd:8545
+      - IPFS_GATEWAY=${IPFS_GATEWAY:-https://ipfs.cert.network}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - API_HOST=0.0.0.0
+      - API_PORT=3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      certd:
+        condition: service_started
+    networks:
+      - cert-network
+    restart: unless-stopped
+
+  # IPFS Node (Optional - for local development)
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: cert-ipfs
+    ports:
+      - "4001:4001"    # P2P
+      - "5001:5001"    # API
+      - "8080:8080"    # Gateway
+    volumes:
+      - ipfs-data:/data/ipfs
+    networks:
+      - cert-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+  # Redis Cache (Optional - for API caching)
+  redis:
+    image: redis:7-alpine
+    container_name: cert-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - cert-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+volumes:
+  certd-data:
+    name: certd-data
+  postgres-data:
+    name: cert-postgres-data
+  ipfs-data:
+    name: cert-ipfs-data
+  redis-data:
+    name: cert-redis-data
+
+networks:
+  cert-network:
+    name: cert-network
+    driver: bridge
+
