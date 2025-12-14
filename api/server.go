@@ -43,7 +43,7 @@ func DefaultConfig() *Config {
 		WriteTimeout:    15 * time.Second,
 		ShutdownTimeout: 30 * time.Second,
 		AllowedOrigins:  []string{"*"},
-		IPFSGateway:     "https://ipfs.cert.network",
+		IPFSGateway:     "https://ipfs.c3rt.org",
 		ChainRPCURL:     "http://localhost:26657",
 	}
 }
@@ -97,6 +97,12 @@ func (s *Server) setupRoutes() {
 
 	// Statistics
 	api.HandleFunc("/stats", s.handleGetStats).Methods("GET")
+
+	// Faucet endpoint (testnet only)
+	api.HandleFunc("/faucet", s.handleFaucet).Methods("POST", "OPTIONS")
+
+	// Governance endpoints
+	api.HandleFunc("/governance/proposals", s.handleGetProposals).Methods("GET")
 }
 
 // setupMiddleware configures middleware
@@ -135,4 +141,3 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("Shutting down API server")
 	return s.httpServer.Shutdown(ctx)
 }
-

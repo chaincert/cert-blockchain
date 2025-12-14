@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # CERT Blockchain Production Deployment Script
 # Server: 172.239.32.74 (C3rt.org)
 # Per Whitepaper Section 8: API Specifications

@@ -178,6 +178,16 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleGetProposals handles GET /api/v1/governance/proposals
+func (s *Server) handleGetProposals(w http.ResponseWriter, r *http.Request) {
+	// Return empty proposals list for now
+	// TODO: Query blockchain for active governance proposals
+	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"proposals": []interface{}{},
+		"total":     0,
+	})
+}
+
 // generateUID generates a random UID
 func generateUID() string {
 	bytes := make([]byte, 32)
@@ -189,4 +199,3 @@ func generateUID() string {
 func getCurrentTimestamp() int64 {
 	return time.Now().Unix()
 }
-

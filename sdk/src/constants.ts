@@ -9,9 +9,9 @@ export const CERT_TESTNET_CHAIN_ID = 'cert-testnet-1';
 export const CERT_EVM_CHAIN_ID = 8888;
 
 // Default endpoints
-export const CERT_RPC_URL = 'https://rpc.certblockchain.io';
-export const CERT_API_URL = 'https://api.certblockchain.io';
-export const CERT_IPFS_GATEWAY = 'https://ipfs.certblockchain.io';
+export const CERT_RPC_URL = 'https://rpc.c3rt.org';
+export const CERT_API_URL = 'https://api.c3rt.org/api/v1';
+export const CERT_IPFS_GATEWAY = 'https://ipfs.c3rt.org';
 
 // Token parameters per Whitepaper Section 5
 export const CERT_DENOM = 'ucert';
