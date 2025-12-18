@@ -62,12 +62,16 @@ services:
     ports:
       # Custom REST API (Per Development Plan 2.1)
       - "3000:3000"
+    volumes:
+      # Allow the API container to run `docker exec certd ...` (used by faucet + dashboard queries)
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgres://cert:${POSTGRES_PASSWORD:-certpass}@postgres:5432/certid?sslmode=disable
       - CHAIN_RPC_URL=http://certd:26657
       - EVM_RPC_URL=http://certd:8545
       - IPFS_GATEWAY=${IPFS_GATEWAY:-https://ipfs.c3rt.org}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - TESTNET_STAKING_APY_PERCENT=${TESTNET_STAKING_APY_PERCENT:-10}
       - API_HOST=0.0.0.0
       - API_PORT=3000
     depends_on:
@@ -137,4 +141,3 @@ networks:
   cert-network:
     name: cert-network
     driver: bridge
-

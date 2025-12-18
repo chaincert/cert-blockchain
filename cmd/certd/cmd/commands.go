@@ -12,15 +12,18 @@ import (
 
 	"cosmossdk.io/log"
 
+	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/debug"
 	"github.com/cosmos/cosmos-sdk/client/keys"
 	"github.com/cosmos/cosmos-sdk/client/pruning"
 	"github.com/cosmos/cosmos-sdk/client/rpc"
 	"github.com/cosmos/cosmos-sdk/client/snapshot"
+	"github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
+	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/cli"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 
 	"github.com/chaincertify/certd/app"
@@ -159,9 +162,11 @@ func queryCommand() *cobra.Command {
 		Short:                      "Querying subcommands",
 		DisableFlagParsing:         false,
 		SuggestionsMinimumDistance: 2,
-		RunE:                       nil,
+		RunE:                       client.ValidateCmd,
 	}
 
+	// Add base query commands
+	// Note: In Cosmos SDK v0.50.x, module queries (bank, auth) are accessed via gRPC/REST
 	cmd.AddCommand(
 		rpc.QueryEventForTxCmd(),
 		server.QueryBlockCmd(),
@@ -181,9 +186,10 @@ func txCommand() *cobra.Command {
 		Short:                      "Transactions subcommands",
 		DisableFlagParsing:         false,
 		SuggestionsMinimumDistance: 2,
-		RunE:                       nil,
+		RunE:                       client.ValidateCmd,
 	}
 
+	// Add base tx commands
 	cmd.AddCommand(
 		authcmd.GetSignCommand(),
 		authcmd.GetSignBatchCommand(),
@@ -194,6 +200,12 @@ func txCommand() *cobra.Command {
 		authcmd.GetEncodeCommand(),
 		authcmd.GetDecodeCommand(),
 		authcmd.GetSimulateCmd(),
+	)
+
+	// Add module-specific tx commands (bank send for faucet functionality)
+	ac := address.NewBech32Codec(app.AccountAddressPrefix)
+	cmd.AddCommand(
+		bankcli.NewTxCmd(ac),
 	)
 
 	return cmd

@@ -88,6 +88,14 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/attestations/by-attester/{address}", s.handleGetAttestationsByAttester).Methods("GET")
 	api.HandleFunc("/attestations/by-recipient/{address}", s.handleGetAttestationsByRecipient).Methods("GET")
 
+	// Wallet + staking (testnet UX)
+	api.HandleFunc("/wallet/{address}/balance", s.handleGetWalletBalance).Methods("GET")
+	api.HandleFunc("/staking/delegations/{address}", s.handleGetStakingDelegations).Methods("GET")
+	api.HandleFunc("/staking/summary/{address}", s.handleGetStakingSummary).Methods("GET")
+
+	// User dashboard summary (aggregates wallet + staking + attestations)
+	api.HandleFunc("/dashboard/{address}", s.handleGetDashboard).Methods("GET")
+
 	// CertID Profile endpoints (Per CertID Section 2.2)
 	api.HandleFunc("/profile/{address}", s.handleGetProfile).Methods("GET")
 	api.HandleFunc("/profile", s.handleUpdateProfile).Methods("POST")

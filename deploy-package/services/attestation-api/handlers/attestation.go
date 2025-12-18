@@ -2,25 +2,39 @@ package handlers
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 )
 
+func normalizeHex32(value string) (string, bool) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	v = strings.TrimPrefix(v, "0x")
+	if len(v) != 64 {
+		return "", false
+	}
+	if _, err := hex.DecodeString(v); err != nil {
+		return "", false
+	}
+	return "0x" + v, true
+}
+
 // CreateEncryptedAttestationRequest represents the request body
 // Per Whitepaper Section 3.2 - Encrypted Attestation Flow
 type CreateEncryptedAttestationRequest struct {
-	SchemaUID         string            `json:"schemaUID"`
-	IPFSCID           string            `json:"ipfsCID"`
-	EncryptedDataHash string            `json:"encryptedDataHash"`
-	Recipients        []RecipientKey    `json:"recipients"`
-	Revocable         bool              `json:"revocable"`
-	ExpirationTime    *time.Time        `json:"expirationTime,omitempty"`
-	Signature         string            `json:"signature"`
+	SchemaUID         string         `json:"schemaUID"`
+	IPFSCID           string         `json:"ipfsCID"`
+	EncryptedDataHash string         `json:"encryptedDataHash"`
+	Recipients        []RecipientKey `json:"recipients"`
+	Revocable         bool           `json:"revocable"`
+	ExpirationTime    *time.Time     `json:"expirationTime,omitempty"`
+	Signature         string         `json:"signature"`
 }
 
 // RecipientKey represents a recipient and their encrypted symmetric key
@@ -31,16 +45,16 @@ type RecipientKey struct {
 
 // EncryptedAttestationResponse represents the response
 type EncryptedAttestationResponse struct {
-	UID               string         `json:"uid"`
-	SchemaUID         string         `json:"schemaUID"`
-	Attester          string         `json:"attester"`
-	IPFSCID           string         `json:"ipfsCID"`
-	EncryptedDataHash string         `json:"encryptedDataHash"`
-	Recipients        []string       `json:"recipients"`
-	Revocable         bool           `json:"revocable"`
-	Revoked           bool           `json:"revoked"`
-	ExpirationTime    *time.Time     `json:"expirationTime,omitempty"`
-	CreatedAt         time.Time      `json:"createdAt"`
+	UID               string     `json:"uid"`
+	SchemaUID         string     `json:"schemaUID"`
+	Attester          string     `json:"attester"`
+	IPFSCID           string     `json:"ipfsCID"`
+	EncryptedDataHash string     `json:"encryptedDataHash"`
+	Recipients        []string   `json:"recipients"`
+	Revocable         bool       `json:"revocable"`
+	Revoked           bool       `json:"revoked"`
+	ExpirationTime    *time.Time `json:"expirationTime,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
 }
 
 // CreateEncryptedAttestation handles POST /api/v1/encrypted-attestations
@@ -53,6 +67,17 @@ func (h *Handler) CreateEncryptedAttestation(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Validate request per Whitepaper Section 12 constraints
+	if strings.TrimSpace(req.SchemaUID) == "" {
+		respondError(w, http.StatusBadRequest, "Schema UID required")
+		return
+	}
+
+	schemaUID, ok := normalizeHex32(req.SchemaUID)
+	if !ok {
+		respondError(w, http.StatusBadRequest, "Invalid schema UID (must be 32 bytes hex)")
+		return
+	}
+
 	if len(req.Recipients) == 0 {
 		respondError(w, http.StatusBadRequest, "At least one recipient required")
 		return
@@ -65,8 +90,26 @@ func (h *Handler) CreateEncryptedAttestation(w http.ResponseWriter, r *http.Requ
 		respondError(w, http.StatusBadRequest, "Invalid IPFS CID")
 		return
 	}
-	if len(req.EncryptedDataHash) != 64 {
+
+	encryptedDataHash, ok := normalizeHex32(req.EncryptedDataHash)
+	if !ok {
 		respondError(w, http.StatusBadRequest, "Invalid encrypted data hash (must be 32 bytes hex)")
+		return
+	}
+
+	for _, recipient := range req.Recipients {
+		if strings.TrimSpace(recipient.Address) == "" {
+			respondError(w, http.StatusBadRequest, "Recipient address required")
+			return
+		}
+		if strings.TrimSpace(recipient.EncryptedKey) == "" {
+			respondError(w, http.StatusBadRequest, "Recipient encryptedKey required")
+			return
+		}
+	}
+
+	if req.ExpirationTime != nil && req.ExpirationTime.Before(time.Now()) {
+		respondError(w, http.StatusBadRequest, "Expiration time must be in the future")
 		return
 	}
 
@@ -74,7 +117,7 @@ func (h *Handler) CreateEncryptedAttestation(w http.ResponseWriter, r *http.Requ
 	attester := "cert1..." // Placeholder - would be extracted from signature verification
 
 	// Generate UID
-	uidData := fmt.Sprintf("%s%s%d%s", req.SchemaUID, attester, time.Now().UnixNano(), req.EncryptedDataHash)
+	uidData := fmt.Sprintf("%s%s%d%s", schemaUID, attester, time.Now().UnixNano(), encryptedDataHash)
 	hash := sha256.Sum256([]byte(uidData))
 	uid := "0x" + hex.EncodeToString(hash[:])
 
@@ -84,13 +127,13 @@ func (h *Handler) CreateEncryptedAttestation(w http.ResponseWriter, r *http.Requ
 		respondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Insert attestation
 	_, err = tx.Exec(`
 		INSERT INTO encrypted_attestations (uid, schema_uid, attester, ipfs_cid, encrypted_data_hash, revocable, expiration_time)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, uid, req.SchemaUID, attester, req.IPFSCID, req.EncryptedDataHash, req.Revocable, req.ExpirationTime)
+	`, uid, schemaUID, attester, req.IPFSCID, encryptedDataHash, req.Revocable, req.ExpirationTime)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create attestation")
 		return
@@ -121,10 +164,10 @@ func (h *Handler) CreateEncryptedAttestation(w http.ResponseWriter, r *http.Requ
 
 	respondJSON(w, http.StatusCreated, EncryptedAttestationResponse{
 		UID:               uid,
-		SchemaUID:         req.SchemaUID,
+		SchemaUID:         schemaUID,
 		Attester:          attester,
 		IPFSCID:           req.IPFSCID,
-		EncryptedDataHash: req.EncryptedDataHash,
+		EncryptedDataHash: encryptedDataHash,
 		Recipients:        recipients,
 		Revocable:         req.Revocable,
 		Revoked:           false,
@@ -144,7 +187,11 @@ func (h *Handler) GetEncryptedAttestation(w http.ResponseWriter, r *http.Request
 		FROM encrypted_attestations WHERE uid = $1
 	`, uid).Scan(&resp.UID, &resp.SchemaUID, &resp.Attester, &resp.IPFSCID, &resp.EncryptedDataHash, &resp.Revocable, &resp.Revoked, &resp.ExpirationTime, &resp.CreatedAt)
 	if err != nil {
-		respondError(w, http.StatusNotFound, "Attestation not found")
+		if err == sql.ErrNoRows {
+			respondError(w, http.StatusNotFound, "Attestation not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
@@ -190,7 +237,11 @@ func (h *Handler) RetrieveEncryptedData(w http.ResponseWriter, r *http.Request) 
 		WHERE attestation_uid = $1 AND recipient = $2
 	`, uid, req.Requester).Scan(&encryptedKey)
 	if err != nil {
-		respondError(w, http.StatusForbidden, "Not authorized to access this attestation")
+		if err == sql.ErrNoRows {
+			respondError(w, http.StatusForbidden, "Not authorized to access this attestation")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
@@ -198,7 +249,11 @@ func (h *Handler) RetrieveEncryptedData(w http.ResponseWriter, r *http.Request) 
 	var ipfsCID string
 	err = h.db.QueryRow(`SELECT ipfs_cid FROM encrypted_attestations WHERE uid = $1 AND revoked = false`, uid).Scan(&ipfsCID)
 	if err != nil {
-		respondError(w, http.StatusNotFound, "Attestation not found or revoked")
+		if err == sql.ErrNoRows {
+			respondError(w, http.StatusNotFound, "Attestation not found or revoked")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
@@ -241,4 +296,3 @@ func (h *Handler) RevokeAttestation(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
-

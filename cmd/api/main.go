@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,6 +32,12 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		if err := server.Start(); err != nil {
+			// `http.ErrServerClosed` is the expected error returned by `ListenAndServe`
+			// when we call `Shutdown()`.
+			if err == http.ErrServerClosed {
+				logger.Info("API server closed")
+				return
+			}
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
@@ -95,4 +102,3 @@ func loadConfig() *api.Config {
 
 	return config
 }
-

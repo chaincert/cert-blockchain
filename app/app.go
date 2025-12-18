@@ -25,6 +25,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec/address"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
+	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/server/api"
 	"github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -42,25 +43,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/consensus"
 	consensuskeeper "github.com/cosmos/cosmos-sdk/x/consensus/keeper"
 	consensustypes "github.com/cosmos/cosmos-sdk/x/consensus/types"
-	"github.com/cosmos/cosmos-sdk/x/crisis"
-	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
-	"github.com/cosmos/cosmos-sdk/x/distribution"
-	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
-	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	"github.com/cosmos/cosmos-sdk/x/gov"
-	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	"github.com/cosmos/cosmos-sdk/x/mint"
-	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
-	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
-	"github.com/cosmos/cosmos-sdk/x/slashing"
-	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
-	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -90,30 +78,23 @@ var (
 	DefaultNodeHome string
 
 	// ModuleBasics defines the module BasicManager for the app
-	// Note: EVM compatibility is provided via JSON-RPC proxy and smart contracts
-	// Direct ethermint integration deferred due to Cosmos SDK v0.50 compatibility
+	// Must match modules registered in ModuleManager to avoid gRPC gateway registration issues
 	ModuleBasics = module.NewBasicManager(
 		auth.AppModuleBasic{},
 		genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
 		bank.AppModuleBasic{},
 		staking.AppModuleBasic{},
-		mint.AppModuleBasic{},
-		distribution.AppModuleBasic{},
-		gov.AppModuleBasic{},
 		params.AppModuleBasic{},
-		crisis.AppModuleBasic{},
-		slashing.AppModuleBasic{},
 		consensus.AppModuleBasic{},
 		// Custom CERT modules
 		attestationmodule.AppModuleBasic{},
 	)
 
-	// Module account permissions
+	// Module account permissions - only for modules in ModuleManager
 	maccPerms = map[string][]string{
 		authtypes.FeeCollectorName:     nil,
 		stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
 		stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-		govtypes.ModuleName:            {authtypes.Burner},
 	}
 )
 
@@ -170,19 +151,14 @@ type CertApp struct {
 	tkeys   map[string]*storetypes.TransientStoreKey
 	memKeys map[string]*storetypes.MemoryStoreKey
 
-	// Cosmos SDK Keepers
+	// Cosmos SDK Keepers (only modules in ModuleManager)
 	AccountKeeper   authkeeper.AccountKeeper
 	BankKeeper      bankkeeper.Keeper
 	StakingKeeper   *stakingkeeper.Keeper
-	SlashingKeeper  slashingkeeper.Keeper
-	MintKeeper      mintkeeper.Keeper
-	DistrKeeper     distrkeeper.Keeper
-	GovKeeper       govkeeper.Keeper
-	CrisisKeeper    *crisiskeeper.Keeper
 	ParamsKeeper    paramskeeper.Keeper
 	ConsensusKeeper consensuskeeper.Keeper
 
-	// IBC Keeper
+	// IBC Keeper (placeholder for future IBC integration)
 	IBCKeeper *ibckeeper.Keeper
 
 	// CERT Custom Module Keepers
@@ -238,15 +214,12 @@ func NewCertApp(
 	bApp.SetInterfaceRegistry(interfaceRegistry)
 	bApp.SetTxEncoder(txConfig.TxEncoder())
 
-	// Define store keys
+	// Define store keys - only include stores for modules in ModuleManager
+	// Removed mint, distribution, slashing, gov as they're not in ModuleManager
 	keys := storetypes.NewKVStoreKeys(
 		authtypes.StoreKey,
 		banktypes.StoreKey,
 		stakingtypes.StoreKey,
-		minttypes.StoreKey,
-		distrtypes.StoreKey,
-		slashingtypes.StoreKey,
-		govtypes.StoreKey,
 		paramstypes.StoreKey,
 		consensustypes.StoreKey, // Required for consensus params storage
 		attestationtypes.StoreKey,
@@ -274,14 +247,10 @@ func NewCertApp(
 		tkeys[paramstypes.TStoreKey],
 	)
 
-	// Set param subspaces for modules
+	// Set param subspaces for modules (only for modules in ModuleManager)
 	certApp.ParamsKeeper.Subspace(authtypes.ModuleName)
 	certApp.ParamsKeeper.Subspace(banktypes.ModuleName)
 	certApp.ParamsKeeper.Subspace(stakingtypes.ModuleName)
-	certApp.ParamsKeeper.Subspace(minttypes.ModuleName)
-	certApp.ParamsKeeper.Subspace(distrtypes.ModuleName)
-	certApp.ParamsKeeper.Subspace(slashingtypes.ModuleName)
-	certApp.ParamsKeeper.Subspace(govtypes.ModuleName)
 
 	// Create bech32 address codec for account keeper
 	bech32Codec := address.NewBech32Codec(AccountAddressPrefix)
@@ -472,8 +441,26 @@ func (app *CertApp) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
 // RegisterAPIRoutes registers all application module routes with the provided API server
 func (app *CertApp) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig) {
 	clientCtx := apiSvr.ClientCtx
-	// Register REST routes from modules
+
+	// Register new tx routes from grpc-gateway
+	authtx.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
+
+	// Register new CometBFT queries routes from grpc-gateway
+	cmtservice.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
+
+	// Register node gRPC service for grpc-gateway
+	nodeservice.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
+
+	// Register grpc-gateway routes for all modules
 	ModuleBasics.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
+
+	// Register swagger API from root so that other applications can override easily.
+	// This enables the /swagger/swagger.json endpoint used by tooling and docs UIs.
+	// If swagger assets are missing in the container, we log the error but do NOT
+	// crash the node, so the REST/gRPC gateway can still serve all other routes.
+	if err := server.RegisterSwaggerAPI(apiSvr.ClientCtx, apiSvr.Router, apiConfig.Swagger); err != nil {
+		fmt.Printf("swagger registration failed: %v\n", err)
+	}
 }
 
 // RegisterTxService implements the Application.RegisterTxService method
@@ -483,11 +470,13 @@ func (app *CertApp) RegisterTxService(clientCtx client.Context) {
 
 // RegisterTendermintService implements the Application.RegisterTendermintService method
 func (app *CertApp) RegisterTendermintService(clientCtx client.Context) {
+	// Use CometABCIWrapper for proper query handling
+	cmtApp := server.NewCometABCIWrapper(app)
 	cmtservice.RegisterTendermintService(
 		clientCtx,
 		app.BaseApp.GRPCQueryRouter(),
 		app.interfaceRegistry,
-		app.Query,
+		cmtApp.Query,
 	)
 }
 

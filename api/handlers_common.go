@@ -137,10 +137,21 @@ func (s *Server) handleGetAttestationsByAttester(w http.ResponseWriter, r *http.
 	vars := mux.Vars(r)
 	address := vars["address"]
 
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"attester":     address,
-		"attestations": []interface{}{},
-	})
+	bech32Addr, err := toBech32Address(address)
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	attestations, err := s.queryAttestationsByAttester(bech32Addr)
+	if err != nil {
+		s.logger.Warn("failed to query attestations by attester", zap.String("address", bech32Addr), zap.Error(err))
+		s.respondError(w, http.StatusBadGateway, "Failed to query attestations")
+		return
+	}
+
+	// Return a plain array for frontend convenience.
+	s.respondJSON(w, http.StatusOK, attestations)
 }
 
 // handleGetAttestationsByRecipient handles GET /api/v1/attestations/by-recipient/{address}
@@ -148,10 +159,21 @@ func (s *Server) handleGetAttestationsByRecipient(w http.ResponseWriter, r *http
 	vars := mux.Vars(r)
 	address := vars["address"]
 
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"recipient":    address,
-		"attestations": []interface{}{},
-	})
+	bech32Addr, err := toBech32Address(address)
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	attestations, err := s.queryAttestationsByRecipient(bech32Addr)
+	if err != nil {
+		s.logger.Warn("failed to query attestations by recipient", zap.String("address", bech32Addr), zap.Error(err))
+		s.respondError(w, http.StatusBadGateway, "Failed to query attestations")
+		return
+	}
+
+	// Return a plain array for frontend convenience.
+	s.respondJSON(w, http.StatusOK, attestations)
 }
 
 // handleAddCredential handles POST /api/v1/profile/credentials

@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /cert-api ./cmd/api
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata docker-cli
 
 # Create non-root user
 RUN addgroup -g 1000 cert && \
@@ -44,4 +44,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/v1/health || exit 1
 
 ENTRYPOINT ["cert-api"]
-

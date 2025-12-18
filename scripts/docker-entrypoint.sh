@@ -83,13 +83,25 @@ if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     # Enable CORS for API
     sed -i 's/cors_allowed_origins = \[\]/cors_allowed_origins = ["*"]/' $HOME_DIR/config/config.toml
 
-    # Enable API
-    sed -i 's/enable = false/enable = true/' $HOME_DIR/config/app.toml
-    sed -i 's/swagger = false/swagger = true/' $HOME_DIR/config/app.toml
-    sed -i 's/address = "tcp:\/\/localhost:1317"/address = "tcp:\/\/0.0.0.0:1317"/' $HOME_DIR/config/app.toml
+    # Enable API, gRPC, and gRPC-Web - using awk for more reliable section-based editing
+    # Alpine's busybox sed has limited support for range patterns
+    awk '
+    /^\[api\]/ { in_api=1 }
+    /^\[grpc\]$/ { in_api=0; in_grpc=1 }
+    /^\[grpc-web\]/ { in_grpc=0; in_grpc_web=1 }
+    /^\[/ && !/^\[api\]/ && !/^\[grpc\]$/ && !/^\[grpc-web\]/ { in_api=0; in_grpc=0; in_grpc_web=0 }
 
-    # Enable gRPC
-    sed -i 's/address = "localhost:9090"/address = "0.0.0.0:9090"/' $HOME_DIR/config/app.toml
+    in_api && /^enable = false/ { $0="enable = true" }
+    in_api && /^swagger = false/ { $0="swagger = true" }
+    in_api && /^address = "tcp:\/\/localhost:1317"/ { $0="address = \"tcp://0.0.0.0:1317\"" }
+
+    in_grpc && /^enable = false/ { $0="enable = true" }
+    in_grpc && /^address = "localhost:9090"/ { $0="address = \"0.0.0.0:9090\"" }
+
+    in_grpc_web && /^enable = false/ { $0="enable = true" }
+
+    { print }
+    ' $HOME_DIR/config/app.toml > $HOME_DIR/config/app.toml.tmp && mv $HOME_DIR/config/app.toml.tmp $HOME_DIR/config/app.toml
 
     # Create validator account
     echo "Step 4: Creating validator key..."
@@ -105,32 +117,40 @@ if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     # ============================================================
     echo "Step 5: Adding genesis accounts (Tokenomics v2.1)..."
 
-    # Give validator a small amount for staking (10,000 CERT for gentx)
+    # Give validator enough for staking PLUS faucet/operations
+    # 10,000 CERT for stake + 100,000 CERT for faucet operations = 110,000 CERT
     # This comes from the staking pool allocation
-    certd genesis add-genesis-account $VALIDATOR_ADDRESS 10000000000$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+    certd genesis add-genesis-account $VALIDATOR_ADDRESS 110000000000$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
 
     # Treasury (32%) - 320,000,000 CERT
     echo "  Adding Treasury (32%): 320,000,000 CERT"
-    certd genesis add-genesis-account $TREASURY_ADDR_EVM ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-    certd genesis add-genesis-account $(echo $TREASURY_ADDR_EVM | sed 's/0x//') ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+	    # Note: certd genesis currently expects a Bech32 address or key name.
+	    # Our EVM addresses may not be directly importable yet. Make failures non-fatal
+	    # so that node initialization (gentx, collect-gentxs, validate) can still succeed.
+	    certd genesis add-genesis-account $TREASURY_ADDR_EVM ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    certd genesis add-genesis-account $(echo $TREASURY_ADDR_EVM | sed 's/0x//') ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    echo "  Warning: could not add Treasury genesis account (address format not yet supported), skipping."
 
     # Staking Pool (30% - 10k for validator) - 299,990,000 CERT
     echo "  Adding Staking Pool (30%): 299,990,000 CERT"
     STAKING_REMAINING=$((STAKING_AMOUNT - 10000000000))
-    certd genesis add-genesis-account $STAKING_ADDR_EVM ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-    certd genesis add-genesis-account $(echo $STAKING_ADDR_EVM | sed 's/0x//') ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+	    certd genesis add-genesis-account $STAKING_ADDR_EVM ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    certd genesis add-genesis-account $(echo $STAKING_ADDR_EVM | sed 's/0x//') ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    echo "  Warning: could not add Staking Pool genesis account (address format not yet supported), skipping."
 
     # Note: Team and Private Sale share same address, combine amounts
     # Combined (15% + 15%) - 300,000,000 CERT
     echo "  Adding Team + Private Sale (30%): 300,000,000 CERT"
     COMBINED_AMOUNT=$((TEAM_AMOUNT + PRIVATE_AMOUNT))
-    certd genesis add-genesis-account $TEAM_ADDR_EVM ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-    certd genesis add-genesis-account $(echo $TEAM_ADDR_EVM | sed 's/0x//') ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+	    certd genesis add-genesis-account $TEAM_ADDR_EVM ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    certd genesis add-genesis-account $(echo $TEAM_ADDR_EVM | sed 's/0x//') ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    echo "  Warning: could not add Team+Private genesis account (address format not yet supported), skipping."
 
     # Advisors (5%) - 50,000,000 CERT
     echo "  Adding Advisors (5%): 50,000,000 CERT"
-    certd genesis add-genesis-account $ADVISORS_ADDR_EVM ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-    certd genesis add-genesis-account $(echo $ADVISORS_ADDR_EVM | sed 's/0x//') ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+	    certd genesis add-genesis-account $ADVISORS_ADDR_EVM ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    certd genesis add-genesis-account $(echo $ADVISORS_ADDR_EVM | sed 's/0x//') ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
+	    echo "  Warning: could not add Advisors genesis account (address format not yet supported), skipping."
 
     # Airdrop (3%) - 30,000,000 CERT (added to Treasury for now)
     echo "  Adding Airdrop (3%): 30,000,000 CERT (to Treasury)"
