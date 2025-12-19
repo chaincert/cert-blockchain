@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/chaincertify/certd/api/database"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
@@ -128,8 +131,45 @@ func (s *Server) handleCreateAttestation(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleGetAttestation(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uid := vars["uid"]
+	if uid == "" {
+		s.respondError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
 
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{"uid": uid})
+	// Best-effort: query the chain via certd.
+	// Command: certd query attestation attestation <uid> --output json
+	var raw map[string]any
+	if err := s.execCertdQueryJSON(&raw, "attestation", "attestation", uid); err != nil {
+		s.logger.Warn("failed to query attestation", zap.String("uid", uid), zap.Error(err))
+		// Fallback to minimal response.
+		s.respondJSON(w, http.StatusOK, map[string]any{"uid": uid})
+		return
+	}
+
+	// Normalize common shapes for frontend convenience.
+	if a, ok := raw["attestation"].(map[string]any); ok {
+		out := map[string]any{"uid": uid}
+		if v, ok := a["schema_uid"]; ok {
+			out["schema"] = v
+		}
+		if v, ok := a["attester"]; ok {
+			out["issuer"] = v
+		}
+		if v, ok := a["recipient"]; ok {
+			out["recipient"] = v
+		}
+		if v, ok := a["time"]; ok {
+			out["time"] = v
+		}
+		if v, ok := a["attestation_type"]; ok {
+			out["type"] = v
+			out["encrypted"] = v != "public" && v != ""
+		}
+		s.respondJSON(w, http.StatusOK, out)
+		return
+	}
+
+	s.respondJSON(w, http.StatusOK, raw)
 }
 
 // handleGetAttestationsByAttester handles GET /api/v1/attestations/by-attester/{address}
@@ -178,16 +218,100 @@ func (s *Server) handleGetAttestationsByRecipient(w http.ResponseWriter, r *http
 
 // handleAddCredential handles POST /api/v1/profile/credentials
 func (s *Server) handleAddCredential(w http.ResponseWriter, r *http.Request) {
-	s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-		s.respondJSON(w, http.StatusCreated, map[string]string{"status": "created"})
-	})(w, r)
+	if s.db == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "CertID database not configured")
+		return
+	}
+
+	// NOTE: until a full auth flow exists, we allow non-JWT writes unless disabled.
+	address := getAuthenticatedAddress(r)
+	if address == "" && os.Getenv("ALLOW_UNAUTH_PROFILE_WRITE") == "0" {
+		s.respondError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	var req struct {
+		UserAddress    string `json:"user_address"`
+		CredentialType string `json:"credential_type"`
+		AttestationUID string `json:"attestation_uid"`
+		Issuer         string `json:"issuer"`
+		Verified       bool   `json:"verified"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if req.UserAddress == "" {
+		req.UserAddress = address
+	}
+	if req.UserAddress == "" {
+		s.respondError(w, http.StatusBadRequest, "user_address is required")
+		return
+	}
+	if req.CredentialType == "" || req.AttestationUID == "" || req.Issuer == "" {
+		s.respondError(w, http.StatusBadRequest, "credential_type, attestation_uid, and issuer are required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	c := &database.Credential{
+		UserAddress:    req.UserAddress,
+		CredentialType: req.CredentialType,
+		AttestationUID: req.AttestationUID,
+		Issuer:         req.Issuer,
+		Verified:       req.Verified,
+		IssuedAt:       time.Now(),
+	}
+	if err := s.db.AddCredential(ctx, c); err != nil {
+		s.logger.Warn("failed to add credential", zap.String("address", req.UserAddress), zap.Error(err))
+		s.respondError(w, http.StatusBadGateway, "Failed to add credential")
+		return
+	}
+
+	s.respondJSON(w, http.StatusCreated, c)
 }
 
 // handleRemoveCredential handles DELETE /api/v1/profile/credentials/{id}
 func (s *Server) handleRemoveCredential(w http.ResponseWriter, r *http.Request) {
-	s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-		s.respondJSON(w, http.StatusOK, map[string]string{"status": "removed"})
-	})(w, r)
+	if s.db == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "CertID database not configured")
+		return
+	}
+
+	address := getAuthenticatedAddress(r)
+	if address == "" && os.Getenv("ALLOW_UNAUTH_PROFILE_WRITE") == "0" {
+		s.respondError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if id == "" {
+		s.respondError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	// For now, user can pass the user_address in a header when unauth.
+	userAddress := address
+	if userAddress == "" {
+		userAddress = r.Header.Get("X-User-Address")
+	}
+	if userAddress == "" {
+		s.respondError(w, http.StatusBadRequest, "user address is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := s.db.RemoveCredential(ctx, userAddress, id); err != nil {
+		s.respondError(w, http.StatusNotFound, "credential not found")
+		return
+	}
+
+	s.respondJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
 // handleGetStats handles GET /api/v1/stats

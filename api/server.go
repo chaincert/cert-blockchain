@@ -4,9 +4,11 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"net/http"
 	"time"
 
+	"github.com/chaincertify/certd/api/database"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"go.uber.org/zap"
@@ -18,6 +20,7 @@ type Server struct {
 	httpServer *http.Server
 	logger     *zap.Logger
 	config     *Config
+	db         *database.DB
 }
 
 // Config holds API server configuration
@@ -36,6 +39,8 @@ type Config struct {
 
 // DefaultConfig returns default API configuration
 func DefaultConfig() *Config {
+	secret := make([]byte, 32)
+	_, _ = rand.Read(secret)
 	return &Config{
 		Host:            "0.0.0.0",
 		Port:            "3000",
@@ -43,6 +48,7 @@ func DefaultConfig() *Config {
 		WriteTimeout:    15 * time.Second,
 		ShutdownTimeout: 30 * time.Second,
 		AllowedOrigins:  []string{"*"},
+		JWTSecret:       secret,
 		IPFSGateway:     "https://ipfs.c3rt.org",
 		ChainRPCURL:     "http://localhost:26657",
 	}
@@ -52,10 +58,20 @@ func DefaultConfig() *Config {
 func NewServer(config *Config, logger *zap.Logger) *Server {
 	router := mux.NewRouter()
 
+	var dbConn *database.DB
+	if config.DatabaseURL != "" {
+		if d, err := database.NewFromURL(config.DatabaseURL, logger); err != nil {
+			logger.Warn("Database disabled (failed to connect)", zap.Error(err))
+		} else {
+			dbConn = d
+		}
+	}
+
 	s := &Server{
 		router: router,
 		logger: logger,
 		config: config,
+		db:     dbConn,
 	}
 
 	s.setupRoutes()
@@ -71,6 +87,10 @@ func (s *Server) setupRoutes() {
 
 	// Health check
 	api.HandleFunc("/health", s.handleHealth).Methods("GET")
+
+	// Auth endpoints (EIP-191 challenge/response -> JWT)
+	api.HandleFunc("/auth/challenge", s.handleAuthChallenge).Methods("GET")
+	api.HandleFunc("/auth/verify", s.handleAuthVerify).Methods("POST")
 
 	// Encrypted Attestation endpoints (Per Whitepaper Section 8)
 	api.HandleFunc("/encrypted-attestations", s.handleCreateEncryptedAttestation).Methods("POST")
@@ -102,6 +122,9 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/profile/verify-social", s.handleVerifySocial).Methods("POST")
 	api.HandleFunc("/profile/credentials", s.handleAddCredential).Methods("POST")
 	api.HandleFunc("/profile/credentials/{id}", s.handleRemoveCredential).Methods("DELETE")
+
+	// CertID Verifiable Credential (VC) endpoints
+	api.HandleFunc("/certid/vc/verify", s.handleVerifyCertIDVC).Methods("POST")
 
 	// Statistics
 	api.HandleFunc("/stats", s.handleGetStats).Methods("GET")
@@ -147,5 +170,11 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("Shutting down API server")
-	return s.httpServer.Shutdown(ctx)
+	err := s.httpServer.Shutdown(ctx)
+	if s.db != nil {
+		if cerr := s.db.Close(); cerr != nil {
+			s.logger.Warn("Failed to close database", zap.Error(cerr))
+		}
+	}
+	return err
 }
