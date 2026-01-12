@@ -2,16 +2,23 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/ripemd160"
 )
 
 // Minimal EIP-191 auth (challenge -> signature -> JWT)
@@ -124,42 +131,187 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	entry.Used = true
 	authMu.Unlock()
 
-	// Verify EIP-191 signature for EVM-style addresses.
-	// (Cosmos/bech32 wallet auth is not implemented here.)
-	if !(strings.HasPrefix(req.Address, "0x") || strings.HasPrefix(req.Address, "0X")) {
-		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "only 0x... addresses supported for auth"})
+	// Normalize address: support both 0x... (EVM) and cert1... (bech32) formats
+	// For bech32 addresses, convert to 0x format for signature verification
+	evmAddress := req.Address
+	originalAddress := req.Address // Preserve original format for JWT
+
+	if strings.HasPrefix(req.Address, "cert1") {
+		// Decode bech32 to get raw address bytes
+		_, addrBytes, err := bech32.DecodeAndConvert(req.Address)
+		if err != nil {
+			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid bech32 address"})
+			return
+		}
+		if len(addrBytes) != 20 {
+			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid address length"})
+			return
+		}
+		evmAddress = fmt.Sprintf("0x%x", addrBytes)
+	} else if !(strings.HasPrefix(req.Address, "0x") || strings.HasPrefix(req.Address, "0X")) {
+		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "address must be 0x... or cert1... format"})
 		return
 	}
 
-	sigBytes, err := decodeAnySignature(req.Signature)
-	if err != nil {
-		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid signature"})
-		return
+	// Try to parse as Keplr JSON signature with pubkey
+	type keplrPubKey struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
 	}
-	if len(sigBytes) != 65 {
-		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "signature must be 65 bytes"})
-		return
+	type keplrSignature struct {
+		Signature string      `json:"signature"`
+		PubKey    keplrPubKey `json:"pub_key"`
 	}
-	if sigBytes[64] >= 27 {
-		sigBytes[64] -= 27
+
+	var keplrSig keplrSignature
+	var sigBytes []byte
+	var pubKeyBytes []byte
+
+	if err := json.Unmarshal([]byte(req.Signature), &keplrSig); err == nil && keplrSig.Signature != "" {
+		// Keplr JSON format with pubkey
+		s.logger.Debug("parsed Keplr signature", zap.String("pubkey_type", keplrSig.PubKey.Type))
+		sigBytes, err = base64.StdEncoding.DecodeString(keplrSig.Signature)
+		if err != nil {
+			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid signature encoding"})
+			return
+		}
+		if keplrSig.PubKey.Value != "" {
+			pubKeyBytes, _ = base64.StdEncoding.DecodeString(keplrSig.PubKey.Value)
+		}
+	} else {
+		// Standard signature format
+		sigBytes, err = decodeAnySignature(req.Signature)
+		if err != nil {
+			s.logger.Warn("signature decode failed", zap.Error(err), zap.String("sig_prefix", req.Signature[:min(20, len(req.Signature))]))
+			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid signature"})
+			return
+		}
+	}
+	s.logger.Debug("signature decoded", zap.Int("len", len(sigBytes)), zap.Int("pubkey_len", len(pubKeyBytes)))
+
+	// Handle different signature lengths:
+	// - 65 bytes: EIP-191 with recovery byte (MetaMask, ethers.js)
+	// - 64 bytes: Cosmos-style without recovery byte (Keplr signArbitrary)
+	if len(sigBytes) != 65 && len(sigBytes) != 64 {
+		s.logger.Warn("signature wrong length", zap.Int("got", len(sigBytes)))
+		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: fmt.Sprintf("signature must be 64 or 65 bytes, got %d", len(sigBytes))})
+		return
 	}
 
 	hash := accounts.TextHash([]byte(entry.Message))
-	pub, err := crypto.SigToPub(hash, sigBytes)
-	if err != nil {
-		s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signature verification failed"})
-		return
+	var recovered string
+
+	// If we have a pubkey, verify using direct verification instead of recovery
+	if len(pubKeyBytes) == 33 {
+		// Compressed secp256k1 pubkey from Keplr
+		// Verify signature against ADR-036 hash
+		adr036Hash := adr036SignDocHash(originalAddress, []byte(entry.Message))
+
+		// Verify signature directly
+		sigValid := crypto.VerifySignature(pubKeyBytes, adr036Hash, sigBytes[:64])
+		if !sigValid {
+			s.logger.Warn("direct signature verification failed")
+			s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signature verification failed"})
+			return
+		}
+
+		// Keplr uses Cosmos address derivation: SHA256 + RIPEMD160 of pubkey
+		// (not Ethermint's Keccak256)
+		cosmosAddrBytes := cosmosAddressFromPubkey(pubKeyBytes)
+		cosmosAddr, err := bech32.ConvertAndEncode("cert", cosmosAddrBytes)
+		if err != nil {
+			s.logger.Warn("failed to encode cosmos address", zap.Error(err))
+			s.respondJSON(w, http.StatusInternalServerError, authVerifyResponse{OK: false, Error: "internal error"})
+			return
+		}
+
+		s.logger.Debug("verified with pubkey", zap.String("cosmosAddr", cosmosAddr), zap.String("expected", originalAddress))
+
+		// Compare cosmos addresses (bech32)
+		if !strings.EqualFold(cosmosAddr, originalAddress) {
+			s.logger.Warn("pubkey address mismatch", zap.String("recovered", cosmosAddr), zap.String("expected", originalAddress))
+			s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signer does not match address"})
+			return
+		}
+
+		// Set recovered for JWT generation (use bech32 address)
+		recovered = evmAddress // Token will use EVM address for compatibility
+	} else if len(sigBytes) == 65 {
+		// Standard EIP-191 signature with recovery byte
+		if sigBytes[64] >= 27 {
+			sigBytes[64] -= 27
+		}
+		pub, err := crypto.SigToPub(hash, sigBytes)
+		if err != nil {
+			s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signature verification failed"})
+			return
+		}
+		recovered = crypto.PubkeyToAddress(*pub).Hex()
+	} else {
+		// 64-byte signature (Cosmos/Keplr) - try ADR-036 hash first, then EIP-191
+		var matched bool
+		var triedAddrs []string
+
+		// Try ADR-036 hash (Keplr signArbitrary) - requires original bech32 address
+		adr036Hash := adr036SignDocHash(originalAddress, []byte(entry.Message))
+		for _, v := range []byte{0, 1} {
+			sig65 := make([]byte, 65)
+			copy(sig65, sigBytes)
+			sig65[64] = v
+			pub, err := crypto.SigToPub(adr036Hash, sig65)
+			if err != nil {
+				continue
+			}
+			addr := crypto.PubkeyToAddress(*pub).Hex()
+			triedAddrs = append(triedAddrs, fmt.Sprintf("adr036-v%d:%s", v, addr))
+			if strings.EqualFold(addr, evmAddress) {
+				recovered = addr
+				matched = true
+				s.logger.Debug("ADR-036 signature matched", zap.String("addr", addr))
+				break
+			}
+		}
+
+		// Fallback: try EIP-191 hash
+		if !matched {
+			for _, v := range []byte{0, 1} {
+				sig65 := make([]byte, 65)
+				copy(sig65, sigBytes)
+				sig65[64] = v
+				pub, err := crypto.SigToPub(hash, sig65)
+				if err != nil {
+					continue
+				}
+				addr := crypto.PubkeyToAddress(*pub).Hex()
+				triedAddrs = append(triedAddrs, fmt.Sprintf("eip191-v%d:%s", v, addr))
+				if strings.EqualFold(addr, evmAddress) {
+					recovered = addr
+					matched = true
+					break
+				}
+			}
+		}
+
+		if !matched {
+			s.logger.Warn("signature verification failed - no address match",
+				zap.String("expected", evmAddress),
+				zap.Strings("recovered", triedAddrs))
+			s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signature verification failed"})
+			return
+		}
 	}
-	recovered := crypto.PubkeyToAddress(*pub).Hex()
-	if !strings.EqualFold(recovered, req.Address) {
+
+	// Compare against the normalized EVM address
+	if !strings.EqualFold(recovered, evmAddress) {
 		s.respondJSON(w, http.StatusUnauthorized, authVerifyResponse{OK: false, Error: "signer does not match address"})
 		return
 	}
 
 	// Issue JWT (default 12 hours)
+	// Store the original address format (could be bech32 or EVM) for consistency
 	exp := time.Now().Add(12 * time.Hour)
 	claims := jwt.MapClaims{
-		"address": req.Address,
+		"address": originalAddress,
 		"nonce":   req.Nonce,
 		"iat":     time.Now().Unix(),
 		"exp":     exp.Unix(),
@@ -171,5 +323,99 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.respondJSON(w, http.StatusOK, authVerifyResponse{OK: true, Address: req.Address, Token: signed, ExpiresAt: exp.Unix()})
+	s.respondJSON(w, http.StatusOK, authVerifyResponse{OK: true, Address: originalAddress, Token: signed, ExpiresAt: exp.Unix()})
+}
+
+
+// adr036SignDocHash computes the hash for ADR-036 arbitrary message signing.
+// This matches what Keplr's signArbitrary produces.
+// Format: amino-encoded SignDoc with a MsgSignData containing the signer and data.
+func adr036SignDocHash(signer string, data []byte) []byte {
+	// ADR-036 uses amino encoding for SignDoc
+	// The structure is:
+	// SignDoc { chain_id: "", account_number: "0", sequence: "0", fee: {gas: "0", amount: []}, msgs: [MsgSignData], memo: "" }
+	// MsgSignData { signer: <bech32>, data: <base64> }
+
+	// Build the canonical JSON (sorted keys, no spaces)
+	dataB64 := base64.StdEncoding.EncodeToString(data)
+
+	// MsgSignData amino type
+	msg := map[string]interface{}{
+		"type": "sign/MsgSignData",
+		"value": map[string]interface{}{
+			"data":   dataB64,
+			"signer": signer,
+		},
+	}
+
+	signDoc := map[string]interface{}{
+		"account_number": "0",
+		"chain_id":       "",
+		"fee": map[string]interface{}{
+			"amount": []interface{}{},
+			"gas":    "0",
+		},
+		"memo": "",
+		"msgs": []interface{}{msg},
+		"sequence": "0",
+	}
+
+	// Marshal to canonical JSON (sorted keys)
+	jsonBytes := marshalCanonicalJSON(signDoc)
+
+	// SHA256 hash
+	hash := sha256.Sum256(jsonBytes)
+	return hash[:]
+}
+
+// marshalCanonicalJSON produces canonical JSON with sorted keys
+func marshalCanonicalJSON(v interface{}) []byte {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var b strings.Builder
+		b.WriteString("{")
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			b.WriteString(`"`)
+			b.WriteString(k)
+			b.WriteString(`":`)
+			b.Write(marshalCanonicalJSON(val[k]))
+		}
+		b.WriteString("}")
+		return []byte(b.String())
+	case []interface{}:
+		var b strings.Builder
+		b.WriteString("[")
+		for i, item := range val {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			b.Write(marshalCanonicalJSON(item))
+		}
+		b.WriteString("]")
+		return []byte(b.String())
+	case string:
+		escaped, _ := json.Marshal(val)
+		return escaped
+	default:
+		result, _ := json.Marshal(val)
+		return result
+	}
+}
+
+
+// cosmosAddressFromPubkey computes Cosmos-style address from compressed secp256k1 pubkey
+// Uses SHA256 + RIPEMD160 (not Keccak256 like Ethereum)
+func cosmosAddressFromPubkey(pubkey []byte) []byte {
+	sha := sha256.Sum256(pubkey)
+	rip := ripemd160.New()
+	rip.Write(sha[:])
+	return rip.Sum(nil)
 }

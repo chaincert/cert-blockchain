@@ -1,0 +1,25 @@
+{
+  "name": "CERT Dark Theme",
+  "about_url": "https://c3rt.org",
+  "license_url": "https://github.com/chaincertify/cert-discourse-theme/blob/main/LICENSE",
+  "component": false,
+  "color_schemes": {
+    "CERT Dark": {
+      "primary": "E4E4E7",
+      "secondary": "050508",
+      "tertiary": "4D9FFF",
+      "quaternary": "9D00FF",
+      "header_background": "0A0A0F",
+      "header_primary": "FFFFFF",
+      "highlight": "00FFA3",
+      "danger": "FF4444",
+      "success": "00FFA3",
+      "love": "9D00FF"
+    }
+  },
+  "assets": {},
+  "modifiers": {
+    "serialize_topic_excerpts": true
+  }
+}
+

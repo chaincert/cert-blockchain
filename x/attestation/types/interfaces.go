@@ -23,21 +23,37 @@ type MsgServer interface {
 
 // MsgRegisterSchemaResponse is the response for MsgRegisterSchema
 type MsgRegisterSchemaResponse struct {
-	Uid string `json:"uid"`
+	Uid string `json:"uid" protobuf:"bytes,1,opt,name=uid,proto3"`
 }
+
+func (m *MsgRegisterSchemaResponse) Reset()         { *m = MsgRegisterSchemaResponse{} }
+func (m *MsgRegisterSchemaResponse) String() string { return m.Uid }
+func (m *MsgRegisterSchemaResponse) ProtoMessage()  {}
 
 // MsgAttestResponse is the response for MsgAttest
 type MsgAttestResponse struct {
-	Uid string `json:"uid"`
+	Uid string `json:"uid" protobuf:"bytes,1,opt,name=uid,proto3"`
 }
+
+func (m *MsgAttestResponse) Reset()         { *m = MsgAttestResponse{} }
+func (m *MsgAttestResponse) String() string { return m.Uid }
+func (m *MsgAttestResponse) ProtoMessage()  {}
 
 // MsgRevokeResponse is the response for MsgRevoke
 type MsgRevokeResponse struct{}
 
+func (m *MsgRevokeResponse) Reset()         { *m = MsgRevokeResponse{} }
+func (m *MsgRevokeResponse) String() string { return "MsgRevokeResponse" }
+func (m *MsgRevokeResponse) ProtoMessage()  {}
+
 // MsgCreateEncryptedAttestationResponse is the response for MsgCreateEncryptedAttestation
 type MsgCreateEncryptedAttestationResponse struct {
-	Uid string `json:"uid"`
+	Uid string `json:"uid" protobuf:"bytes,1,opt,name=uid,proto3"`
 }
+
+func (m *MsgCreateEncryptedAttestationResponse) Reset()         { *m = MsgCreateEncryptedAttestationResponse{} }
+func (m *MsgCreateEncryptedAttestationResponse) String() string { return m.Uid }
+func (m *MsgCreateEncryptedAttestationResponse) ProtoMessage()  {}
 
 // QueryServer defines the attestation module's gRPC query service
 type QueryServer interface {
@@ -219,9 +235,34 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 var _Query_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cert.attestation.v1.Query",
 	HandlerType: (*QueryServer)(nil),
-	Methods:     []grpc.MethodDesc{},
-	Streams:     []grpc.StreamDesc{},
-	Metadata:    "cert/attestation/v1/query.proto",
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Schema",
+			Handler:    _Query_Schema_Handler,
+		},
+		{
+			MethodName: "Attestation",
+			Handler:    _Query_Attestation_Handler,
+		},
+		{
+			MethodName: "AttestationsByAttester",
+			Handler:    _Query_AttestationsByAttester_Handler,
+		},
+		{
+			MethodName: "AttestationsByRecipient",
+			Handler:    _Query_AttestationsByRecipient_Handler,
+		},
+		{
+			MethodName: "EncryptedAttestation",
+			Handler:    _Query_EncryptedAttestation_Handler,
+		},
+		{
+			MethodName: "Stats",
+			Handler:    _Query_Stats_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "cert/attestation/v1/query.proto",
 }
 
 // gRPC method handlers for Msg service
@@ -293,6 +334,115 @@ func _Msg_CreateEncryptedAttestation_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MsgServer).CreateEncryptedAttestation(ctx, req.(*MsgCreateEncryptedAttestation))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// gRPC method handlers for Query service
+func _Query_Schema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QuerySchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).Schema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/Schema",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).Schema(ctx, req.(*QuerySchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_Attestation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryAttestationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).Attestation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/Attestation",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).Attestation(ctx, req.(*QueryAttestationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_AttestationsByAttester_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryAttestationsByAttesterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).AttestationsByAttester(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/AttestationsByAttester",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).AttestationsByAttester(ctx, req.(*QueryAttestationsByAttesterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_AttestationsByRecipient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryAttestationsByRecipientRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).AttestationsByRecipient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/AttestationsByRecipient",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).AttestationsByRecipient(ctx, req.(*QueryAttestationsByRecipientRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_EncryptedAttestation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryEncryptedAttestationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).EncryptedAttestation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/EncryptedAttestation",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).EncryptedAttestation(ctx, req.(*QueryEncryptedAttestationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_Stats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).Stats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cert.attestation.v1.Query/Stats",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).Stats(ctx, req.(*QueryStatsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -19,6 +19,12 @@ var (
 
 	// ParamsKey is the key for module parameters
 	ParamsKey = []byte{0x06}
+
+	// HandleToAddressKeyPrefix maps handles to addresses
+	HandleToAddressKeyPrefix = []byte{0x07}
+
+	// OracleKeyPrefix is the prefix for authorized oracles
+	OracleKeyPrefix = []byte{0x08}
 )
 
 // GetProfileKey returns the store key for a profile
@@ -42,5 +48,15 @@ func GetCredentialKey(address string, credentialUID string) []byte {
 func GetSocialVerificationKey(address string, platform string) []byte {
 	key := append(SocialVerificationKeyPrefix, []byte(address)...)
 	return append(key, []byte(platform)...)
+}
+
+// GetHandleToAddressKey returns the store key for handle-to-address mapping
+func GetHandleToAddressKey(handle string) []byte {
+	return append(HandleToAddressKeyPrefix, []byte(handle)...)
+}
+
+// GetOracleKey returns the store key for an oracle authorization
+func GetOracleKey(oracle string) []byte {
+	return append(OracleKeyPrefix, []byte(oracle)...)
 }
 

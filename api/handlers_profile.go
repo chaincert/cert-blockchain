@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -16,6 +19,7 @@ import (
 // Per CertID Section 2.2: user_profiles table structure
 type UserProfile struct {
 	Address     string            `json:"address"`
+	CertIDUID   string            `json:"certid_uid,omitempty"`
 	Name        string            `json:"name"`
 	Bio         string            `json:"bio"`
 	AvatarURL   string            `json:"avatar_url"`
@@ -23,6 +27,13 @@ type UserProfile struct {
 	Credentials []Credential      `json:"credentials"`
 	CreatedAt   int64             `json:"created_at"`
 	UpdatedAt   int64             `json:"updated_at"`
+}
+
+// generateCertIDUID generates a unique CertID UID based on address and timestamp
+func generateCertIDUID(address string) string {
+	data := fmt.Sprintf("certid:%s:%d", address, time.Now().UnixNano())
+	hash := sha256.Sum256([]byte(data))
+	return "0x" + hex.EncodeToString(hash[:])
 }
 
 // Credential represents a verified credential linked to a profile
@@ -81,6 +92,7 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 
 	resp := UserProfile{Address: address, SocialLinks: map[string]string{}, Credentials: []Credential{}}
 	if prof != nil {
+		resp.CertIDUID = prof.CertIDUID
 		resp.Name = prof.Name
 		resp.Bio = prof.Bio
 		resp.AvatarURL = prof.AvatarURL

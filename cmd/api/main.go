@@ -84,6 +84,37 @@ func loadConfig() *api.Config {
 	if chainRPC := os.Getenv("CHAIN_RPC_URL"); chainRPC != "" {
 		config.ChainRPCURL = chainRPC
 	}
+	if chainID := os.Getenv("CERT_TX_CHAIN_ID"); chainID != "" {
+		config.ChainID = chainID
+	} else if chainID := os.Getenv("CERT_CHAIN_ID"); chainID != "" {
+		// Back-compat / convenience: if a single chain-id env var is used, apply it to tx as well.
+		config.ChainID = chainID
+	}
+
+	if v := os.Getenv("CERT_TX_FROM"); v != "" {
+		config.TxFrom = v
+	}
+	if v := os.Getenv("CERT_TX_KEYRING_BACKEND"); v != "" {
+		config.TxKeyringBackend = v
+	}
+	if v := os.Getenv("CERT_TX_HOME"); v != "" {
+		config.TxHome = v
+	}
+	if v := os.Getenv("CERT_TX_NODE"); v != "" {
+		config.TxNode = v
+	}
+	if v := os.Getenv("CERT_TX_GAS"); v != "" {
+		config.TxGas = v
+	}
+	if v := os.Getenv("CERT_TX_FEES"); v != "" {
+		config.TxFees = v
+	}
+	if v := os.Getenv("CERT_TX_GAS_PRICES"); v != "" {
+		config.TxGasPrices = v
+	}
+	if v := os.Getenv("CERT_TX_BROADCAST_MODE"); v != "" {
+		config.TxBroadcastMode = v
+	}
 	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
 		config.JWTSecret = []byte(jwtSecret)
 	}

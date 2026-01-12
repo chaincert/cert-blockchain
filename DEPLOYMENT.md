@@ -49,13 +49,31 @@ systemctl restart nginx
 
 ### 4. Configure Firewall
 
+**Automated Setup (Recommended):**
 ```bash
+# Run the automated firewall configuration script
+cd /opt/cert-blockchain/scripts
+./apply-firewall-remote.sh
+```
+
+**Manual Setup:**
+```bash
+# See FIREWALL-SETUP.md for detailed instructions
+# Quick setup:
 ufw allow 22/tcp    # SSH
 ufw allow 80/tcp    # HTTP (redirect)
 ufw allow 443/tcp   # HTTPS
 ufw allow 26656/tcp # P2P
+ufw deny 3000/tcp   # Block direct API access
+ufw deny 5432/tcp   # Block PostgreSQL
 ufw enable
+
+# Install fail2ban for SSH protection
+apt install -y fail2ban
+systemctl enable fail2ban
 ```
+
+📖 **See [FIREWALL-SETUP.md](FIREWALL-SETUP.md) for complete security configuration**
 
 ## Services
 
@@ -93,9 +111,9 @@ docker-compose ps
 ## Maintenance
 
 ```bash
-# View logs
-docker-compose logs -f certd
-docker-compose logs -f api
+ # View logs
+ docker-compose logs -f certd
+ docker-compose logs -f api  # (service name is "api"; container name is "cert-api")
 
 # Restart services
 docker-compose restart
@@ -128,4 +146,3 @@ docker-compose exec postgres psql -U cert -d certid -c "SELECT 1"
 docker-compose down -v
 docker-compose up -d
 ```
-

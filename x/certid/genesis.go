@@ -107,8 +107,9 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState GenesisState) {
 
 // ExportGenesis exports the module's state to a genesis state
 func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *GenesisState {
+	profiles := k.GetAllProfiles(ctx)
 	return &GenesisState{
 		Params:   DefaultParams(),
-		Profiles: []types.CertID{}, // TODO: Export all profiles
+		Profiles: profiles,
 	}
 }

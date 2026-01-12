@@ -1,7 +1,8 @@
 # CERT API Server Dockerfile
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+# go.mod requires Go >= 1.22
+FROM golang:1.22-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache make git gcc musl-dev

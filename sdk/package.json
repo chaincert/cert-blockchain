@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Official JavaScript SDK for CERT Blockchain - Encrypted Attestations and CertID",
   "main": "dist/index.js",
-  "module": "dist/index.esm.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
@@ -28,8 +28,8 @@
     "cosmos",
     "evm"
   ],
-  "author": "CERT Blockchain Team",
-  "license": "MIT",
+  "author": "Brandon Guynn",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/chaincertify/cert-blockchain"
@@ -59,4 +59,3 @@
     "node": ">=18.0.0"
   }
 }
-

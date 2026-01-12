@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -16,6 +18,7 @@ type contextKey string
 
 const (
 	UserAddressKey contextKey = "user_address"
+	APIKeyInfoKey  contextKey = "api_key_info"
 )
 
 // loggingMiddleware logs all incoming requests
@@ -131,3 +134,57 @@ func getAuthenticatedAddress(r *http.Request) string {
 	return ""
 }
 
+// apiKeyMiddleware validates API keys from X-API-Key header
+// This provides higher rate limits and tracks usage per key
+func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey == "" {
+			// No API key - continue with default rate limits
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Validate API key format (must start with cert_)
+		if !strings.HasPrefix(apiKey, "cert_") {
+			http.Error(w, "Invalid API key format", http.StatusUnauthorized)
+			return
+		}
+
+		// Hash the key to look up in database
+		hash := sha256.Sum256([]byte(apiKey))
+		keyHash := hex.EncodeToString(hash[:])
+
+		if s.db == nil {
+			// No database - can't validate keys
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Validate the key
+		keyInfo, err := s.db.ValidateAPIKey(r.Context(), keyHash)
+		if err != nil {
+			s.logger.Error("Failed to validate API key", zap.Error(err))
+			http.Error(w, "Failed to validate API key", http.StatusInternalServerError)
+			return
+		}
+
+		if keyInfo == nil {
+			http.Error(w, "Invalid or expired API key", http.StatusUnauthorized)
+			return
+		}
+
+		// Increment usage counter (async to not block request)
+		go func() {
+			if err := s.db.IncrementAPIKeyUsage(context.Background(), keyInfo.ID); err != nil {
+				s.logger.Error("Failed to increment API key usage", zap.Error(err))
+			}
+		}()
+
+		// Add key info to context
+		ctx := context.WithValue(r.Context(), APIKeyInfoKey, keyInfo)
+		// Also set the owner address for authorization
+		ctx = context.WithValue(ctx, UserAddressKey, keyInfo.OwnerAddress)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}

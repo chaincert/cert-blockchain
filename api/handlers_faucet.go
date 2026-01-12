@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -89,6 +90,21 @@ func (s *Server) handleFaucet(w http.ResponseWriter, r *http.Request) {
 	faucetRequests[req.Address] = time.Now()
 	faucetMutex.Unlock()
 
+	// Record the transaction in the database for balance tracking
+	// This helps when SDK state queries fail (known v0.50.x bug)
+	if s.db != nil && txHash != "" {
+		bech32Addr, _ := toBech32Address(req.Address)
+		if bech32Addr != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.db.RecordFaucetTransaction(ctx, txHash, bech32Addr, 10000000); err != nil {
+				s.logger.Warn("Failed to record faucet transaction",
+					zap.String("tx_hash", txHash),
+					zap.Error(err))
+			}
+		}
+	}
+
 	// Return success
 	s.respondJSON(w, http.StatusOK, FaucetResponse{
 		Success: true,
@@ -137,14 +153,14 @@ func (s *Server) executeFaucetTransfer(toAddress string) (string, error) {
 set -eu
 
 certd tx bank send validator %s %sucert \
-  --keyring-backend test --home /root/.certd --chain-id 951753 \
+  --keyring-backend test --home /root/.certd --chain-id cert-testnet-1 \
   --gas 200000 --fees 10000ucert --generate-only > /tmp/unsigned.json
 
 # certd tx sign sometimes emits the signed tx JSON on stderr (SDK/CLI quirk).
 # Capture its combined output, then extract the first full-line JSON object.
 certd tx sign /tmp/unsigned.json \
   --from validator --keyring-backend test --home /root/.certd \
-  --chain-id 951753 --offline --account-number %d --sequence %d \
+  --chain-id cert-testnet-1 --offline --account-number %d --sequence %d \
   --output json 2>&1 | sed -n 's/^\({.*}\)$/\1/p' | head -n 1 > /tmp/signed.json
 
 test -s /tmp/signed.json

@@ -2,7 +2,7 @@
 # Multi-stage build for optimized image size
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache make git gcc musl-dev linux-headers
@@ -37,7 +37,7 @@ COPY --from=builder /certd /usr/local/bin/certd
 
 # Copy entrypoint script
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create data directory
 RUN mkdir -p /root/.certd && chown -R cert:cert /root/.certd

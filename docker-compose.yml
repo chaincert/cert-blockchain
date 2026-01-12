@@ -24,7 +24,7 @@ services:
     volumes:
       - certd-data:/root/.certd
     environment:
-      - CERT_CHAIN_ID=951753
+      - CERT_CHAIN_ID=cert-testnet-1
       - CERT_MONIKER=cert-node-1
     networks:
       - cert-network
@@ -48,13 +48,15 @@ services:
       - cert-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cert -d certid"]
+      test: [ "CMD-SHELL", "pg_isready -U cert -d certid" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # CERT API Server
   api:
+    # NOTE: Compose *service name* is "api" (use `docker compose logs -f api`).
+    # The container name is "cert-api".
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -74,6 +76,21 @@ services:
       - TESTNET_STAKING_APY_PERCENT=${TESTNET_STAKING_APY_PERCENT:-10}
       - API_HOST=0.0.0.0
       - API_PORT=3000
+
+      # certd tx signing/broadcast (used by POST /api/v1/attestations and POST /api/v1/schemas)
+      # Defaults match local docker-compose chain + keyring.
+      - CERT_TX_CHAIN_ID=cert-testnet-1
+      - CERT_TX_FROM=validator
+      - CERT_TX_KEYRING_BACKEND=test
+      - CERT_TX_HOME=/root/.certd
+      - CERT_TX_NODE=tcp://localhost:26657
+      - CERT_TX_GAS=200000
+      - CERT_TX_FEES=10000ucert
+      - CERT_TX_BROADCAST_MODE=block
+      # Didit.me KYC Integration
+      - DIDIT_API_KEY=${DIDIT_API_KEY:-}
+      - DIDIT_WEBHOOK_SECRET=${DIDIT_WEBHOOK_SECRET:-}
+      - DIDIT_WORKFLOW_ID=${DIDIT_WORKFLOW_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,9 +105,9 @@ services:
     image: ipfs/kubo:latest
     container_name: cert-ipfs
     ports:
-      - "4001:4001"    # P2P
-      - "5001:5001"    # API
-      - "8080:8080"    # Gateway
+      - "4001:4001" # P2P
+      - "5001:5001" # API
+      - "8080:8080" # Gateway
     volumes:
       - ipfs-data:/data/ipfs
     networks:

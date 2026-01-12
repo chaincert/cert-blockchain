@@ -1,0 +1,763 @@
+// CERT Blockchain - Discourse Theme
+// Matches the cert-web design system
+// Colors: mint (#00FFA3), electric (#4D9FFF), cyber (#9D00FF)
+
+// ============================================
+// Import Inter Font (matching cert-web)
+// ============================================
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap');
+
+// ============================================
+// CSS Custom Properties (matching Tailwind config)
+// ============================================
+:root {
+  --cert-ink: #050508;
+  --cert-surface: #0A0A0F;
+  --cert-panel: #0D0D14;
+  --cert-mint: #00FFA3;
+  --cert-electric: #4D9FFF;
+  --cert-cyber: #9D00FF;
+  --cert-border: rgba(255, 255, 255, 0.1);
+  --cert-border-hover: rgba(255, 255, 255, 0.2);
+  --cert-text: #E4E4E7;
+  --cert-text-muted: rgba(255, 255, 255, 0.6);
+
+  // Discourse color overrides
+  --primary: #E4E4E7;
+  --secondary: #050508;
+  --tertiary: #4D9FFF;
+  --quaternary: #9D00FF;
+  --header-background: #0A0A0F;
+  --header-primary: #FFFFFF;
+  --highlight: #00FFA3;
+  --danger: #FF4444;
+  --success: #00FFA3;
+  --love: #9D00FF;
+}
+
+// ============================================
+// Base Styles
+// ============================================
+html,
+body {
+  background-color: var(--cert-ink) !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  color: var(--cert-text);
+}
+
+#main-outlet {
+  background-color: var(--cert-ink);
+}
+
+// Selection highlight
+::selection {
+  background-color: var(--cert-mint);
+  color: black;
+}
+
+// Custom Scrollbar (matching cert-web)
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cert-ink);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cert-mint);
+}
+
+// ============================================
+// Header
+// ============================================
+.d-header {
+  background: var(--cert-surface) !important;
+  border-bottom: 1px solid var(--cert-border);
+  backdrop-filter: blur(12px);
+
+  .d-header-icons .icon {
+    color: var(--cert-text-muted);
+
+    &:hover {
+      color: var(--cert-mint);
+    }
+  }
+}
+
+.header-dropdown-toggle .active {
+  .d-icon {
+    color: var(--cert-mint);
+  }
+}
+
+// ============================================
+// Navigation
+// ============================================
+.navigation-container {
+  background: var(--cert-surface);
+  border-bottom: 1px solid var(--cert-border);
+}
+
+.nav-pills>li>a {
+  color: var(--cert-text-muted);
+  border-radius: 0.75rem;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--cert-text);
+  }
+
+  &.active {
+    background: rgba(0, 255, 163, 0.1);
+    color: var(--cert-mint);
+  }
+}
+
+// ============================================
+// Topic List
+// ============================================
+.topic-list {
+  background: transparent;
+
+  .topic-list-item {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: var(--cert-border-hover);
+    }
+  }
+
+  .topic-list-data {
+    padding: 1rem;
+  }
+}
+
+.topic-list-item .main-link a.title {
+  color: var(--cert-text);
+
+  &:hover {
+    color: var(--cert-mint);
+  }
+}
+
+// ============================================
+// Categories
+// ============================================
+.category-list {
+  .category-box {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+
+    &:hover {
+      border-color: var(--cert-border-hover);
+    }
+  }
+}
+
+.badge-category {
+  font-weight: 600;
+}
+
+// ============================================
+// Buttons
+// ============================================
+.btn-primary {
+  background: linear-gradient(135deg, var(--cert-mint), var(--cert-electric)) !important;
+  color: black !important;
+  border: none !important;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 24px rgba(0, 255, 163, 0.3);
+  }
+}
+
+.btn-default {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cert-border);
+  color: var(--cert-text);
+  border-radius: 0.75rem;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--cert-border-hover);
+  }
+}
+
+// ============================================
+// Cards & Panels
+// ============================================
+.topic-body {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.user-card,
+.group-card {
+  background: var(--cert-surface) !important;
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+// ============================================
+// Posts & Content
+// ============================================
+.topic-post {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: var(--cert-border-hover);
+  }
+
+  article {
+    padding: 1.5rem;
+  }
+}
+
+.cooked {
+  color: var(--cert-text);
+
+  a {
+    color: var(--cert-electric);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--cert-mint);
+      text-decoration: underline;
+    }
+  }
+
+  code {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--cert-border);
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.375rem;
+    color: var(--cert-mint);
+    font-size: 0.875em;
+  }
+
+  pre {
+    background: var(--cert-surface) !important;
+    border: 1px solid var(--cert-border);
+    border-radius: 0.75rem;
+    padding: 1rem;
+
+    code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--cert-text);
+    }
+  }
+
+  blockquote {
+    background: rgba(77, 159, 255, 0.05);
+    border-left: 4px solid var(--cert-electric);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--cert-text);
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
+// ============================================
+// Composer (New Post/Reply)
+// ============================================
+#reply-control {
+  background: var(--cert-surface);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+
+  .d-editor-container {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 0.75rem;
+  }
+
+  .d-editor-textarea-wrapper {
+    background: var(--cert-panel);
+
+    textarea {
+      background: transparent;
+      color: var(--cert-text);
+
+      &::placeholder {
+        color: var(--cert-text-muted);
+      }
+    }
+  }
+
+  .d-editor-preview-wrapper {
+    background: var(--cert-panel);
+  }
+}
+
+// ============================================
+// Search
+// ============================================
+.search-menu {
+  background: var(--cert-surface);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+  .search-input {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 0.75rem;
+    color: var(--cert-text);
+
+    &:focus {
+      border-color: var(--cert-mint);
+      box-shadow: 0 0 0 3px rgba(0, 255, 163, 0.1);
+    }
+  }
+
+  .results {
+    background: var(--cert-panel);
+
+    .search-result-topic {
+      border-bottom: 1px solid var(--cert-border);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+    }
+  }
+}
+
+// ============================================
+// Sidebar
+// ============================================
+.sidebar-section-wrapper {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  margin-bottom: 1rem;
+
+  .sidebar-section-header {
+    color: var(--cert-text);
+    font-weight: 600;
+  }
+
+  .sidebar-section-link {
+    color: var(--cert-text-muted);
+    border-radius: 0.5rem;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--cert-text);
+    }
+
+    &.active {
+      background: rgba(0, 255, 163, 0.1);
+      color: var(--cert-mint);
+    }
+  }
+}
+
+// ============================================
+// Modals & Dropdowns
+// ============================================
+.modal {
+  .modal-inner-container {
+    background: var(--cert-surface);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    background: var(--cert-panel);
+    border-bottom: 1px solid var(--cert-border);
+    border-radius: 1rem 1rem 0 0;
+
+    h3 {
+      color: var(--cert-text);
+    }
+  }
+
+  .modal-body {
+    background: var(--cert-surface);
+    color: var(--cert-text);
+  }
+
+  .modal-footer {
+    background: var(--cert-panel);
+    border-top: 1px solid var(--cert-border);
+    border-radius: 0 0 1rem 1rem;
+  }
+}
+
+.menu-panel {
+  background: var(--cert-surface);
+  border: 1px solid var(--cert-border);
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+  .panel-body {
+    background: transparent;
+  }
+
+  li {
+    a {
+      color: var(--cert-text-muted);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--cert-text);
+      }
+    }
+  }
+}
+
+// ============================================
+// Badges & Tags
+// ============================================
+.badge-notification {
+  background: var(--cert-mint);
+  color: black;
+  font-weight: 600;
+  border-radius: 0.5rem;
+}
+
+.discourse-tag {
+  background: rgba(77, 159, 255, 0.1);
+  border: 1px solid rgba(77, 159, 255, 0.3);
+  color: var(--cert-electric);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  &:hover {
+    background: rgba(77, 159, 255, 0.2);
+    border-color: var(--cert-electric);
+  }
+}
+
+// ============================================
+// User Profiles
+// ============================================
+.user-main {
+  .about {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+    padding: 1.5rem;
+  }
+
+  .user-content {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+  }
+}
+
+.user-profile-avatar {
+  border: 3px solid var(--cert-mint);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(0, 255, 163, 0.3);
+}
+
+.user-stat {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cert-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+
+  .value {
+    color: var(--cert-mint);
+    font-weight: 700;
+    font-size: 1.5rem;
+  }
+
+  .label {
+    color: var(--cert-text-muted);
+    font-size: 0.875rem;
+  }
+}
+
+// ============================================
+// Forms & Inputs
+// ============================================
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 0.75rem;
+  color: var(--cert-text);
+  padding: 0.75rem 1rem;
+
+  &:focus {
+    border-color: var(--cert-mint);
+    box-shadow: 0 0 0 3px rgba(0, 255, 163, 0.1);
+    outline: none;
+  }
+
+  &::placeholder {
+    color: var(--cert-text-muted);
+  }
+}
+
+// ============================================
+// Loading & Progress
+// ============================================
+.spinner {
+  border-color: var(--cert-border);
+  border-top-color: var(--cert-mint);
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, var(--cert-mint), var(--cert-electric));
+  border-radius: 9999px;
+}
+
+// ============================================
+// Notifications
+// ============================================
+.notification {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 0.75rem;
+
+  &.unread {
+    background: rgba(0, 255, 163, 0.05);
+    border-color: rgba(0, 255, 163, 0.2);
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+// ============================================
+// Footer
+// ============================================
+.footer-message {
+  background: var(--cert-surface);
+  border-top: 1px solid var(--cert-border);
+  color: var(--cert-text-muted);
+
+  a {
+    color: var(--cert-electric);
+
+    &:hover {
+      color: var(--cert-mint);
+    }
+  }
+}
+
+// ============================================
+// Animations & Effects
+// ============================================
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(0, 255, 163, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(0, 255, 163, 0.4);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+// Apply glow to primary actions
+.btn-primary,
+.create.btn {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+// Smooth transitions
+a,
+button,
+.topic-list-item,
+.topic-post,
+.sidebar-section-link {
+  transition: all 0.2s ease;
+}
+
+// ============================================
+// Special Elements
+// ============================================
+// Pinned topics
+.topic-list-item.pinned {
+  background: rgba(0, 255, 163, 0.05);
+  border-color: rgba(0, 255, 163, 0.2);
+
+  .topic-list-data a {
+    color: var(--cert-mint);
+  }
+}
+
+// Locked topics
+.topic-list-item.locked {
+  opacity: 0.7;
+}
+
+// Solved topics (if plugin installed)
+.topic-list-item.solved {
+  border-left: 4px solid var(--cert-mint);
+}
+
+// ============================================
+// Mobile Responsive
+// ============================================
+@media (max-width: 768px) {
+  .topic-list-item {
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .topic-post {
+    border-radius: 0.75rem;
+
+    article {
+      padding: 1rem;
+    }
+  }
+
+  #reply-control {
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+
+  .modal-inner-container {
+    border-radius: 0.75rem;
+    margin: 1rem;
+  }
+}
+
+// ============================================
+// Dark Mode Enhancements
+// ============================================
+// Ensure images don't appear too bright
+.lightbox-wrapper .meta {
+  background: var(--cert-surface);
+  border: 1px solid var(--cert-border);
+  border-radius: 0.5rem;
+}
+
+img {
+  &:not(.emoji) {
+    border-radius: 0.5rem;
+  }
+}
+
+// ============================================
+// Admin & Moderation
+// ============================================
+.admin-contents,
+.admin-container {
+  background: var(--cert-ink);
+
+  .admin-nav {
+    background: var(--cert-panel);
+    border: 1px solid var(--cert-border);
+    border-radius: 1rem;
+  }
+}
+
+.flagged-posts,
+.reviewable-item {
+  background: var(--cert-panel);
+  border: 1px solid var(--cert-border);
+  border-radius: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+// ============================================
+// Custom Branding
+// ============================================
+// Logo area
+.title {
+  color: var(--cert-text);
+
+  img {
+    filter: brightness(1.1);
+  }
+}
+
+// Add subtle gradient to header
+.d-header {
+  background: linear-gradient(180deg, var(--cert-surface) 0%, var(--cert-ink) 100%) !important;
+}
+
+// ============================================
+// Accessibility
+// ============================================
+// Focus states
+*:focus-visible {
+  outline: 2px solid var(--cert-mint);
+  outline-offset: 2px;
+}
+
+// High contrast for important elements
+.badge-notification.new-posts,
+.badge-notification.unread-posts {
+  background: var(--cert-mint);
+  color: black;
+  font-weight: 700;
+}
+
+// ============================================
+// Print Styles
+// ============================================
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .topic-post {
+    border: 1px solid #ccc;
+    background: white;
+  }
+}

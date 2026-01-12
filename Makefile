@@ -96,8 +96,8 @@ docker-run:
 ###                                  Init                                   ###
 ###############################################################################
 
-init:
-	./scripts/init.sh
+init: build
+	DAEMON_BIN=$(BUILDDIR)/$(DAEMON_NAME) ./scripts/init.sh
 
 start:
 	$(DAEMON_NAME) start --json-rpc.enable --json-rpc.api eth,txpool,personal,net,debug,web3

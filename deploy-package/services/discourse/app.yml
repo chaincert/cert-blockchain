@@ -1,0 +1,93 @@
+## CERT Discourse Forum Configuration
+## Deploy with: ./launcher rebuild app
+## 
+## This is the official Discourse container configuration for CERT Blockchain
+## Reference: https://github.com/discourse/discourse_docker
+
+templates:
+  - "templates/postgres.template.yml"
+  - "templates/redis.template.yml"
+  - "templates/web.template.yml"
+  - "templates/web.ratelimited.template.yml"
+  ## Uncomment for SSL (recommended for production)
+  # - "templates/web.ssl.template.yml"
+  # - "templates/web.letsencrypt.ssl.template.yml"
+
+## Expose web on port 80 (use reverse proxy for SSL)
+## Note: Using 8082 because IPFS is using 8080 and cert-web is using 8081
+expose:
+  - "8082:80"   # Map to 8082 to avoid conflicts
+
+params:
+  db_default_text_search_config: "pg_catalog.english"
+
+env:
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+  LANGUAGE: en_US.UTF-8
+
+  ## Domain Configuration
+  DISCOURSE_HOSTNAME: 'forum.c3rt.org'
+  
+  ## Developer email for admin account
+  DISCOURSE_DEVELOPER_EMAILS: 'admin@c3rt.org'
+
+  ## SMTP Configuration - Resend.com
+  ## Using port 2587 because standard ports (25, 465, 587) are blocked by cloud provider
+  DISCOURSE_SMTP_ADDRESS: smtp.resend.com
+  DISCOURSE_SMTP_PORT: 2587
+  DISCOURSE_SMTP_USER_NAME: resend
+  DISCOURSE_SMTP_PASSWORD: "re_4Dqgnupy_CqLWocpco2UdYPWiqPpvQEic"
+  DISCOURSE_SMTP_ENABLE_START_TLS: true
+  DISCOURSE_SMTP_DOMAIN: c3rt.org
+  DISCOURSE_SMTP_NOTIFICATION_EMAIL: noreply@c3rt.org
+
+  ## DiscourseConnect SSO (for CertID integration)
+  ## Temporarily disabled until API SSO endpoint is configured
+  DISCOURSE_ENABLE_DISCOURSE_CONNECT: false
+  # DISCOURSE_DISCOURSE_CONNECT_URL: 'https://api.c3rt.org/api/v1/discourse/sso'
+  # DISCOURSE_DISCOURSE_CONNECT_SECRET: "06674add18d416cdbdd5656ba2783a03488b02bc687a882fe022847a80d50646"
+
+  ## Enable local logins temporarily
+  DISCOURSE_ENABLE_LOCAL_LOGINS: true
+  
+  ## Database settings (internal)
+  DISCOURSE_DB_USERNAME: discourse
+  DISCOURSE_DB_PASSWORD: "79c177b7de6edbba3a135bf6a222cf28876908892a2512e2"
+  DISCOURSE_DB_HOST: ''
+  DISCOURSE_DB_NAME: discourse
+
+  ## Redis (internal)
+  DISCOURSE_REDIS_HOST: ''
+
+  ## Performance
+  UNICORN_WORKERS: 2
+
+volumes:
+  - volume:
+      host: /var/discourse/shared/standalone
+      guest: /shared
+  - volume:
+      host: /var/discourse/shared/standalone/log/var-log
+      guest: /var/log
+
+hooks:
+  after_code:
+    - exec:
+        cd: $home/plugins
+        cmd:
+          ## Official plugins
+          - git clone https://github.com/discourse/docker_manager.git
+          ## Note: discourse-oauth2-basic, discourse-solved, discourse-assign, and discourse-voting
+          ## are now bundled with Discourse and don't need to be cloned
+
+run:
+  - exec: echo "Beginning CERT Discourse setup..."
+  - exec: rails r "SiteSetting.title = 'CERT Community'"
+  - exec: rails r "SiteSetting.site_description = 'The official community forum for CERT Blockchain - discuss attestations, credentials, and decentralized identity.'"
+  - exec: rails r "SiteSetting.contact_email = 'community@c3rt.org'"
+  - exec: rails r "SiteSetting.contact_url = 'https://c3rt.org/contact'"
+  - exec: rails r "SiteSetting.company_name = 'CERT Blockchain'"
+  ## Logo, favicon, and theme can be configured via admin panel
+  - exec: echo "CERT Discourse setup complete!"
+

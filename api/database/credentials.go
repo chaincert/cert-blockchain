@@ -165,4 +165,3 @@ func (db *DB) AddSocialVerification(ctx context.Context, verification *SocialVer
 		verification.VerifiedAt,
 	).Scan(&verification.ID, &verification.CreatedAt)
 }
-

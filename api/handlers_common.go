@@ -3,10 +3,14 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chaincertify/certd/api/database"
@@ -19,6 +23,7 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Code    int    `json:"code"`
 	Message string `json:"message,omitempty"`
+	RawLog  string `json:"raw_log,omitempty"`
 }
 
 // respondJSON sends a JSON response
@@ -36,6 +41,15 @@ func (s *Server) respondError(w http.ResponseWriter, status int, message string)
 		Error:   http.StatusText(status),
 		Code:    status,
 		Message: message,
+	})
+}
+
+func (s *Server) respondTxError(w http.ResponseWriter, status int, message string, rawLog string) {
+	s.respondJSON(w, status, ErrorResponse{
+		Error:   http.StatusText(status),
+		Code:    status,
+		Message: message,
+		RawLog:  rawLog,
 	})
 }
 
@@ -73,13 +87,54 @@ func (s *Server) handleCreateSchema(w http.ResponseWriter, r *http.Request) {
 			zap.String("schema", req.Schema),
 		)
 
-		// TODO: Submit to blockchain
+		resolver := strings.TrimSpace(req.Resolver)
+		if resolver != "" {
+			bech, err := toBech32Address(resolver)
+			if err != nil {
+				s.respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid resolver address: %v", err))
+				return
+			}
+			resolver = bech
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+
+		var txRes certdTxResponse
+		args := []string{"attestation", "register-schema", req.Schema, "--revocable", fmt.Sprintf("%t", req.Revocable)}
+		if resolver != "" {
+			args = append(args, "--resolver", resolver)
+		}
+		_, err := s.execCertdTxJSON(ctx, &txRes, args...)
+		if err != nil {
+			s.logger.Error("schema tx failed", zap.Error(err))
+			var txErr *certdTxExecError
+			if errors.As(err, &txErr) {
+				if txErr.Tx.Code != 0 {
+					s.respondTxError(w, http.StatusBadRequest, "schema tx rejected", txErr.Tx.RawLog)
+					return
+				}
+			}
+			s.respondError(w, http.StatusBadGateway, "failed to submit schema tx")
+			return
+		}
+		if txRes.Code != 0 {
+			s.respondTxError(w, http.StatusBadRequest, "schema tx rejected", txRes.RawLog)
+			return
+		}
+
+		uid, _ := findTxEventAttribute(txRes, "schema_uid")
+		if uid == "" {
+			s.logger.Warn("schema tx succeeded but schema_uid not found in events", zap.String("txhash", txRes.TxHash))
+		}
 
 		s.respondJSON(w, http.StatusCreated, map[string]interface{}{
-			"uid":       "0x" + generateUID(),
+			"uid":       uid,
+			"tx_hash":   txRes.TxHash,
 			"schema":    req.Schema,
 			"revocable": req.Revocable,
 			"creator":   creator,
+			"timestamp": certdTxTimestampUnix(txRes.Timestamp),
 		})
 	})(w, r)
 }
@@ -88,15 +143,39 @@ func (s *Server) handleCreateSchema(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uid := vars["uid"]
+	if uid == "" {
+		s.respondError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
 
-	// TODO: Query blockchain
+	// Best-effort: query the chain via certd.
+	// Command: certd query attestation schema <uid> --output json
+	var raw map[string]any
+	if err := s.execCertdQueryJSON(&raw, "attestation", "schema", uid); err != nil {
+		s.logger.Warn("failed to query schema", zap.String("uid", uid), zap.Error(err))
+		s.respondJSON(w, http.StatusOK, map[string]any{"uid": uid})
+		return
+	}
 
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"uid":       uid,
-		"schema":    "",
-		"revocable": true,
-		"creator":   "",
-	})
+	if sch, ok := raw["schema"].(map[string]any); ok {
+		out := map[string]any{"uid": uid}
+		if v, ok := sch["schema"]; ok {
+			out["schema"] = v
+		}
+		if v, ok := sch["revocable"]; ok {
+			out["revocable"] = v
+		}
+		if v, ok := sch["creator"]; ok {
+			out["creator"] = v
+		}
+		if v, ok := sch["resolver"]; ok {
+			out["resolver"] = v
+		}
+		s.respondJSON(w, http.StatusOK, out)
+		return
+	}
+
+	s.respondJSON(w, http.StatusOK, raw)
 }
 
 // handleCreateAttestation handles POST /api/v1/attestations
@@ -116,15 +195,121 @@ func (s *Server) handleCreateAttestation(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		if strings.TrimSpace(req.SchemaUID) == "" {
+			s.respondError(w, http.StatusBadRequest, "schema_uid is required")
+			return
+		}
+
 		attester := getAuthenticatedAddress(r)
 
+		recipient := strings.TrimSpace(req.Recipient)
+		if recipient != "" {
+			bech, err := toBech32Address(recipient)
+			if err != nil {
+				s.respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid recipient address: %v", err))
+				return
+			}
+			recipient = bech
+		}
+
+		dataBytes, err := decodeFlexibleBytes(req.Data)
+		if err != nil {
+			s.respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid data: %v", err))
+			return
+		}
+		dataHex := hex.EncodeToString(dataBytes)
+
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+
+		var txRes certdTxResponse
+		args := []string{"attestation", "attest", req.SchemaUID, dataHex}
+		if recipient != "" {
+			args = append(args, "--recipient", recipient)
+		}
+		if req.ExpirationTime != 0 {
+			args = append(args, "--expiration", fmt.Sprintf("%d", req.ExpirationTime))
+		}
+		args = append(args, "--revocable", fmt.Sprintf("%t", req.Revocable))
+		if strings.TrimSpace(req.RefUID) != "" {
+			args = append(args, "--ref-uid", strings.TrimSpace(req.RefUID))
+		}
+
+		_, err = s.execCertdTxJSON(ctx, &txRes, args...)
+		if err != nil {
+			s.logger.Error("attestation tx failed", zap.Error(err))
+			var txErr *certdTxExecError
+			if errors.As(err, &txErr) {
+				if txErr.Tx.Code != 0 {
+					s.respondTxError(w, http.StatusBadRequest, "attestation tx rejected", txErr.Tx.RawLog)
+					return
+				}
+			}
+			s.respondError(w, http.StatusBadGateway, "failed to submit attestation tx")
+			return
+		}
+		if txRes.Code != 0 {
+			s.respondTxError(w, http.StatusBadRequest, "attestation tx rejected", txRes.RawLog)
+			return
+		}
+
+		uid, _ := findTxEventAttribute(txRes, "attestation_uid")
+		if uid == "" {
+			s.logger.Warn("attestation tx succeeded but attestation_uid not found in events", zap.String("txhash", txRes.TxHash))
+		}
+
 		s.respondJSON(w, http.StatusCreated, map[string]interface{}{
-			"uid":       "0x" + generateUID(),
+			"uid":       uid,
+			"tx_hash":   txRes.TxHash,
 			"attester":  attester,
-			"recipient": req.Recipient,
-			"timestamp": getCurrentTimestamp(),
+			"recipient": recipient,
+			"timestamp": certdTxTimestampUnix(txRes.Timestamp),
 		})
 	})(w, r)
+}
+
+func decodeFlexibleBytes(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return []byte{}, nil
+	}
+	// Hex (with or without 0x prefix)
+	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
+		return hex.DecodeString(strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X"))
+	}
+	if isHexString(s) {
+		return hex.DecodeString(s)
+	}
+	// Base64
+	if b, err := tryBase64(s); err == nil {
+		return b, nil
+	}
+	// Fallback: treat as utf-8
+	return []byte(s), nil
+}
+
+func isHexString(s string) bool {
+	if len(s)%2 != 0 {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		case c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func tryBase64(s string) ([]byte, error) {
+	// Try standard base64 and raw (unpadded) base64.
+	if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	return base64.RawStdEncoding.DecodeString(s)
 }
 
 // handleGetAttestation handles GET /api/v1/attestations/{uid}
@@ -151,15 +336,41 @@ func (s *Server) handleGetAttestation(w http.ResponseWriter, r *http.Request) {
 		out := map[string]any{"uid": uid}
 		if v, ok := a["schema_uid"]; ok {
 			out["schema"] = v
+			out["schema_uid"] = v
 		}
 		if v, ok := a["attester"]; ok {
 			out["issuer"] = v
+			out["attester"] = v
 		}
 		if v, ok := a["recipient"]; ok {
 			out["recipient"] = v
 		}
 		if v, ok := a["time"]; ok {
 			out["time"] = v
+		}
+		if v, ok := a["expiration_time"]; ok {
+			out["expiration_time"] = v
+		}
+		if v, ok := a["revocation_time"]; ok {
+			out["revocation_time"] = v
+		}
+		if v, ok := a["revocable"]; ok {
+			out["revocable"] = v
+		}
+		if v, ok := a["ref_uid"]; ok {
+			out["ref_uid"] = v
+		}
+		if v, ok := a["data"]; ok {
+			out["data"] = v
+		}
+		if v, ok := a["ipfs_cid"]; ok {
+			out["ipfs_cid"] = v
+		}
+		if v, ok := a["encrypted_data_hash"]; ok {
+			out["encrypted_data_hash"] = v
+		}
+		if v, ok := a["recipients"]; ok {
+			out["recipients"] = v
 		}
 		if v, ok := a["attestation_type"]; ok {
 			out["type"] = v
@@ -208,7 +419,8 @@ func (s *Server) handleGetAttestationsByRecipient(w http.ResponseWriter, r *http
 	attestations, err := s.queryAttestationsByRecipient(bech32Addr)
 	if err != nil {
 		s.logger.Warn("failed to query attestations by recipient", zap.String("address", bech32Addr), zap.Error(err))
-		s.respondError(w, http.StatusBadGateway, "Failed to query attestations")
+		// Return empty array as fallback when blockchain node is unavailable
+		s.respondJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -324,15 +536,7 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGetProposals handles GET /api/v1/governance/proposals
-func (s *Server) handleGetProposals(w http.ResponseWriter, r *http.Request) {
-	// Return empty proposals list for now
-	// TODO: Query blockchain for active governance proposals
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"proposals": []interface{}{},
-		"total":     0,
-	})
-}
+// handleGetProposals stub removed - now using handleGetAllProposals in handlers_governance.go
 
 // generateUID generates a random UID
 func generateUID() string {

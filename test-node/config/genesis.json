@@ -1,0 +1,113 @@
+{
+  "app_name": "\u003cappd\u003e",
+  "app_version": "",
+  "genesis_time": "2025-12-27T15:08:39.032542185Z",
+  "chain_id": "cert-testnet-1",
+  "initial_height": 1,
+  "app_hash": null,
+  "app_state": {
+    "attestation": {
+      "params": {
+        "max_recipients_per_attestation": 50,
+        "max_encrypted_file_size": "104857600",
+        "attestation_fee": []
+      },
+      "schemas": [
+        {
+          "uid": "0x1",
+          "resolver": "",
+          "revocable": true,
+          "schema": "string ipfsCID, bytes32 encryptedDataHash, address recipient, bytes encryptedSymmetricKey, uint256 timestamp",
+          "creator": ""
+        },
+        {
+          "uid": "0x2",
+          "resolver": "",
+          "revocable": true,
+          "schema": "string ipfsCID, bytes32 encryptedDataHash, address[] recipients, bytes[] encryptedSymmetricKeys, bool revocable",
+          "creator": ""
+        },
+        {
+          "uid": "0x3",
+          "resolver": "",
+          "revocable": true,
+          "schema": "string ipfsCID, bytes32 encryptedDataHash, address[] recipients, bytes[] encryptedSymmetricKeys, string businessID, string documentCategory, uint256 validUntil",
+          "creator": ""
+        },
+        {
+          "uid": "0x4",
+          "resolver": "",
+          "revocable": true,
+          "schema": "bytes32 dataHash, string metadata, uint256 timestamp",
+          "creator": ""
+        }
+      ],
+      "attestations": [],
+      "encrypted_attestations": []
+    },
+    "auth": {
+      "params": {
+        "max_memo_characters": "256",
+        "tx_sig_limit": "7",
+        "tx_size_cost_per_byte": "10",
+        "sig_verify_cost_ed25519": "590",
+        "sig_verify_cost_secp256k1": "1000"
+      },
+      "accounts": []
+    },
+    "bank": {
+      "params": {
+        "send_enabled": [],
+        "default_send_enabled": true
+      },
+      "balances": [],
+      "supply": [],
+      "denom_metadata": [],
+      "send_enabled": []
+    },
+    "genutil": {
+      "gen_txs": []
+    },
+    "staking": {
+      "params": {
+        "unbonding_time": "1814400s",
+        "max_validators": 100,
+        "max_entries": 7,
+        "historical_entries": 10000,
+        "bond_denom": "stake",
+        "min_commission_rate": "0.000000000000000000"
+      },
+      "last_total_power": "0",
+      "last_validator_powers": [],
+      "validators": [],
+      "delegations": [],
+      "unbonding_delegations": [],
+      "redelegations": [],
+      "exported": false
+    }
+  },
+  "consensus": {
+    "params": {
+      "block": {
+        "max_bytes": "22020096",
+        "max_gas": "-1"
+      },
+      "evidence": {
+        "max_age_num_blocks": "100000",
+        "max_age_duration": "172800000000000",
+        "max_bytes": "1048576"
+      },
+      "validator": {
+        "pub_key_types": [
+          "ed25519"
+        ]
+      },
+      "version": {
+        "app": "0"
+      },
+      "abci": {
+        "vote_extensions_enable_height": "0"
+      }
+    }
+  }
+}

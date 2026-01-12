@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 # CERT Blockchain Docker Entrypoint Script
 # Initializes the chain if not already initialized, then starts the node
 # Tokenomics v2.1 - Total Supply: 1,000,000,000 CERT
@@ -6,7 +6,7 @@
 set -ex
 
 # Support both CHAIN_ID and CERT_CHAIN_ID environment variables
-CHAIN_ID="${CERT_CHAIN_ID:-${CHAIN_ID:-951753}}"
+CHAIN_ID="${CERT_CHAIN_ID:-${CHAIN_ID:-cert-testnet-1}}"
 MONIKER="${CERT_MONIKER:-${MONIKER:-cert-validator}}"
 KEYRING_BACKEND="${KEYRING_BACKEND:-test}"
 HOME_DIR="${HOME_DIR:-/root/.certd}"
@@ -41,6 +41,42 @@ ADVISORS_AMOUNT="50000000000000"
 AIRDROP_ADDR_EVM="0xc68a92163f496ADCc7A8502fB2fdc7341fFdF589"
 AIRDROP_AMOUNT="30000000000000"
 
+# Check if we need to reset data (triggered by RESET_DATA=true env var)
+if [ "${RESET_DATA:-false}" = "true" ]; then
+    echo "RESET_DATA=true detected. Clearing blockchain data..."
+    rm -rf $HOME_DIR/data/*
+    rm -rf $HOME_DIR/config/genesis.json
+    rm -rf $HOME_DIR/config/gentx
+    rm -rf $HOME_DIR/keyring-test/*
+fi
+
+# Auto-detect corrupted data and reset if necessary
+# Check if genesis exists but data is missing/corrupted (common after abrupt shutdown)
+if [ -f "$HOME_DIR/config/genesis.json" ] && [ -d "$HOME_DIR/data" ]; then
+    # If application.db is empty or missing key files, reset
+    if [ ! -f "$HOME_DIR/data/application.db/CURRENT" ] || [ ! -s "$HOME_DIR/data/priv_validator_state.json" ]; then
+        echo "WARNING: Detected corrupted or incomplete data directory. Resetting..."
+        rm -rf $HOME_DIR/data/*
+        rm -rf $HOME_DIR/config/genesis.json
+        rm -rf $HOME_DIR/config/gentx
+        rm -rf $HOME_DIR/keyring-test/*
+    fi
+fi
+
+# Additional check: try a quick status query to detect store corruption
+# This catches cases where files exist but are in an inconsistent state
+if [ -f "$HOME_DIR/config/genesis.json" ] && [ -f "$HOME_DIR/data/application.db/CURRENT" ]; then
+    echo "Validating chain state..."
+    # Use timeout to prevent hanging; if query fails, data is corrupted
+    if ! timeout 5 certd query block 1 --home $HOME_DIR > /dev/null 2>&1; then
+        echo "WARNING: Chain state validation failed. Performing full reset..."
+        rm -rf $HOME_DIR/data/*
+        rm -rf $HOME_DIR/config/genesis.json
+        rm -rf $HOME_DIR/config/gentx
+        rm -rf $HOME_DIR/keyring-test/*
+    fi
+fi
+
 # Check if chain is already initialized
 if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     echo "================================================"
@@ -56,21 +92,36 @@ if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     echo "Step 1: Initializing chain..."
     certd init $MONIKER --chain-id $CHAIN_ID --home $HOME_DIR
 
-    # Update genesis.json to use ucert as the bond denom (instead of default 'stake')
-    echo "Step 1b: Updating staking params to use ucert..."
-    sed -i 's/"bond_denom": "stake"/"bond_denom": "ucert"/' $HOME_DIR/config/genesis.json
-    sed -i 's/"mint_denom": "stake"/"mint_denom": "ucert"/' $HOME_DIR/config/genesis.json
-
-    # Disable inflation (fixed supply per Tokenomics v2.1)
-    echo "Step 1c: Disabling inflation (fixed supply)..."
-    sed -i 's/"inflation": "[^"]*"/"inflation": "0.000000000000000000"/' $HOME_DIR/config/genesis.json
-    sed -i 's/"inflation_rate_change": "[^"]*"/"inflation_rate_change": "0.000000000000000000"/' $HOME_DIR/config/genesis.json
-    sed -i 's/"inflation_max": "[^"]*"/"inflation_max": "0.000000000000000000"/' $HOME_DIR/config/genesis.json
-    sed -i 's/"inflation_min": "[^"]*"/"inflation_min": "0.000000000000000000"/' $HOME_DIR/config/genesis.json
+    # Note: Genesis parameters are now set by NewDefaultGenesisState()
+    # No manual sed patches needed for bond denom or inflation
+    echo "Step 1b: Using custom genesis state with CERT parameters..."
 
     # Configure minimum gas prices
     echo "Step 2: Configuring app.toml..."
     sed -i 's/minimum-gas-prices = ""/minimum-gas-prices = "0.0001ucert"/' $HOME_DIR/config/app.toml
+
+    # Disable IAVL fast node to fix "version does not exist" errors on balance queries
+    # This is required for Cosmos SDK v0.50.x with IAVL v1.x
+    # Using awk for reliable config modification in Alpine
+    awk '{gsub(/iavl-disable-fastnode = false/, "iavl-disable-fastnode = true")}1' $HOME_DIR/config/app.toml > $HOME_DIR/config/app.toml.tmp && mv $HOME_DIR/config/app.toml.tmp $HOME_DIR/config/app.toml
+
+    # Verify the change was applied
+    echo "IAVL FastNode setting:"
+    grep "iavl-disable-fastnode" $HOME_DIR/config/app.toml
+
+    # Set pruning to nothing to keep all state versions (required for REST API queries)
+    awk '{gsub(/pruning = "default"/, "pruning = \"nothing\"")}1' $HOME_DIR/config/app.toml > $HOME_DIR/config/app.toml.tmp && mv $HOME_DIR/config/app.toml.tmp $HOME_DIR/config/app.toml
+
+    # Set app-db-backend to goleveldb for proper store versioning
+    sed -i 's/app-db-backend = ""/app-db-backend = "goleveldb"/' $HOME_DIR/config/app.toml
+
+    # Set min-retain-blocks to 0 to keep all blocks (prevents pruning version issues)
+    sed -i 's/min-retain-blocks = 0/min-retain-blocks = 0/' $HOME_DIR/config/app.toml
+
+    # Disable state-sync snapshots to avoid IAVL v1.x bug with empty module stores
+    # The bug causes "version does not exist" errors when exporting empty stores like crisis module
+    # See: https://github.com/cosmos/iavl/issues/939
+    sed -i 's/snapshot-interval = 100/snapshot-interval = 0/' $HOME_DIR/config/app.toml
 
     # Configure consensus parameters (Whitepaper Section 4.1)
     echo "Step 3: Configuring config.toml..."
@@ -111,53 +162,27 @@ if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     VALIDATOR_ADDRESS=$(certd keys show validator -a --keyring-backend $KEYRING_BACKEND --home $HOME_DIR)
     echo "Validator address: $VALIDATOR_ADDRESS"
 
-    # ============================================================
-    # Step 5: Add Genesis Accounts - Tokenomics v2.1 Distribution
-    # Total: 1,000,000,000 CERT = 1,000,000,000,000,000 ucert
-    # ============================================================
-    echo "Step 5: Adding genesis accounts (Tokenomics v2.1)..."
+	    # Fund validator account in genesis so gentx can succeed
+	    echo "Step 5: Funding validator account in genesis..."
+	    certd genesis add-genesis-account "$VALIDATOR_ADDRESS" 110000000000$DENOM \
+	      --home $HOME_DIR \
+	      --keyring-backend $KEYRING_BACKEND
 
-    # Give validator enough for staking PLUS faucet/operations
-    # 10,000 CERT for stake + 100,000 CERT for faucet operations = 110,000 CERT
-    # This comes from the staking pool allocation
-    certd genesis add-genesis-account $VALIDATOR_ADDRESS 110000000000$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND
+	    # Ensure priv_validator_state.json exists (required by `certd genesis gentx`)
+	    if [ ! -s "$HOME_DIR/data/priv_validator_state.json" ]; then
+	        echo "priv_validator_state.json missing, creating default state file..."
+	        mkdir -p "$HOME_DIR/data"
+	        cat > "$HOME_DIR/data/priv_validator_state.json" <<EOF
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+EOF
+	    fi
 
-    # Treasury (32%) - 320,000,000 CERT
-    echo "  Adding Treasury (32%): 320,000,000 CERT"
-	    # Note: certd genesis currently expects a Bech32 address or key name.
-	    # Our EVM addresses may not be directly importable yet. Make failures non-fatal
-	    # so that node initialization (gentx, collect-gentxs, validate) can still succeed.
-	    certd genesis add-genesis-account $TREASURY_ADDR_EVM ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    certd genesis add-genesis-account $(echo $TREASURY_ADDR_EVM | sed 's/0x//') ${TREASURY_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    echo "  Warning: could not add Treasury genesis account (address format not yet supported), skipping."
-
-    # Staking Pool (30% - 10k for validator) - 299,990,000 CERT
-    echo "  Adding Staking Pool (30%): 299,990,000 CERT"
-    STAKING_REMAINING=$((STAKING_AMOUNT - 10000000000))
-	    certd genesis add-genesis-account $STAKING_ADDR_EVM ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    certd genesis add-genesis-account $(echo $STAKING_ADDR_EVM | sed 's/0x//') ${STAKING_REMAINING}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    echo "  Warning: could not add Staking Pool genesis account (address format not yet supported), skipping."
-
-    # Note: Team and Private Sale share same address, combine amounts
-    # Combined (15% + 15%) - 300,000,000 CERT
-    echo "  Adding Team + Private Sale (30%): 300,000,000 CERT"
-    COMBINED_AMOUNT=$((TEAM_AMOUNT + PRIVATE_AMOUNT))
-	    certd genesis add-genesis-account $TEAM_ADDR_EVM ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    certd genesis add-genesis-account $(echo $TEAM_ADDR_EVM | sed 's/0x//') ${COMBINED_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    echo "  Warning: could not add Team+Private genesis account (address format not yet supported), skipping."
-
-    # Advisors (5%) - 50,000,000 CERT
-    echo "  Adding Advisors (5%): 50,000,000 CERT"
-	    certd genesis add-genesis-account $ADVISORS_ADDR_EVM ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    certd genesis add-genesis-account $(echo $ADVISORS_ADDR_EVM | sed 's/0x//') ${ADVISORS_AMOUNT}$DENOM --home $HOME_DIR --keyring-backend $KEYRING_BACKEND 2>/dev/null || \
-	    echo "  Warning: could not add Advisors genesis account (address format not yet supported), skipping."
-
-    # Airdrop (3%) - 30,000,000 CERT (added to Treasury for now)
-    echo "  Adding Airdrop (3%): 30,000,000 CERT (to Treasury)"
-    # Airdrop uses same address as Treasury, will be combined automatically
-
-    # Create gentx for validator
-    echo "Step 6: Creating gentx (10,000 CERT stake)..."
+	    # Create gentx for validator
+	    echo "Step 6: Creating gentx (10,000 CERT stake)..."
     certd genesis gentx validator 10000000000$DENOM \
       --chain-id $CHAIN_ID \
       --moniker $MONIKER \

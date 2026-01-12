@@ -165,10 +165,9 @@ func (s *Server) handleRevokeEncryptedAttestation(w http.ResponseWriter, r *http
 		// TODO: Submit revocation transaction
 
 		s.respondJSON(w, http.StatusOK, map[string]interface{}{
-			"uid":                uid,
-			"revoked":            true,
-			"revocation_time":    getCurrentTimestamp(),
+			"uid":             uid,
+			"revoked":         true,
+			"revocation_time": getCurrentTimestamp(),
 		})
 	})(w, r)
 }
-

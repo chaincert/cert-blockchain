@@ -20,15 +20,19 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  BADGE_TYPES: () => BADGE_TYPES,
   CERT_API_URL: () => CERT_API_URL,
   CERT_CHAIN_ID: () => CERT_CHAIN_ID,
+  CERT_ID_ABI: () => CERT_ID_ABI,
   CERT_IPFS_GATEWAY: () => CERT_IPFS_GATEWAY,
   CERT_RPC_URL: () => CERT_RPC_URL,
+  CONTRACT_ADDRESSES: () => CONTRACT_ADDRESSES,
   CertClient: () => CertClient,
   CertID: () => CertID,
   DEFAULT_SCHEMAS: () => DEFAULT_SCHEMAS,
   EncryptedAttestation: () => EncryptedAttestation,
   Encryption: () => Encryption,
+  EntityType: () => EntityType,
   IPFS: () => IPFS,
   formatCERT: () => formatCERT,
   generateUID: () => generateUID,
@@ -39,7 +43,7 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 
 // src/client.ts
-var import_ethers2 = require("ethers");
+var import_ethers3 = require("ethers");
 
 // src/encryption.ts
 var import_ethers = require("ethers");
@@ -163,10 +167,10 @@ var Encryption = class {
 
 // src/constants.ts
 var CERT_CHAIN_ID = "cert-mainnet-1";
-var CERT_EVM_CHAIN_ID = 8888;
-var CERT_RPC_URL = "https://rpc.certblockchain.io";
-var CERT_API_URL = "https://api.certblockchain.io";
-var CERT_IPFS_GATEWAY = "https://ipfs.certblockchain.io";
+var CERT_EVM_CHAIN_ID = 951753;
+var CERT_RPC_URL = "https://rpc.c3rt.org";
+var CERT_API_URL = "https://api.c3rt.org/api/v1";
+var CERT_IPFS_GATEWAY = "https://ipfs.c3rt.org";
 var CERT_DECIMALS = 6;
 var MAX_RECIPIENTS_PER_ATTESTATION = 50;
 var MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024;
@@ -175,6 +179,38 @@ var DEFAULT_SCHEMAS = {
   IDENTITY_VERIFICATION: "0x2345678901abcdef2345678901abcdef2345678901abcdef2345678901abcdef",
   CREDENTIAL: "0x3456789012abcdef3456789012abcdef3456789012abcdef3456789012abcdef",
   CERTIFICATE: "0x4567890123abcdef4567890123abcdef4567890123abcdef4567890123abcdef"
+};
+var CONTRACT_ADDRESSES = {
+  SCHEMA_REGISTRY: "0x0000000000000000000000000000000000000001",
+  EAS: "0x0000000000000000000000000000000000000002",
+  ENCRYPTED_ATTESTATION: "0x0000000000000000000000000000000000000003",
+  CERT_TOKEN: "0x0000000000000000000000000000000000000004",
+  CERT_ID: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+  CHAIN_CERTIFY: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+};
+var CERT_ID_ABI = [
+  "function registerProfile(string handle, string metadataURI, uint8 entityType) external",
+  "function updateMetadata(string metadataURI) external",
+  "function awardBadge(address user, string badgeName) external",
+  "function revokeBadge(address user, string badgeName) external",
+  "function updateTrustScore(address user, uint256 score) external",
+  "function incrementTrustScore(address user, uint256 amount) external",
+  "function setVerificationStatus(address user, bool verified) external",
+  "function getProfile(address user) external view returns (string handle, string metadataURI, bool isVerified, uint256 trustScore, uint8 entityType, bool isActive)",
+  "function hasBadge(address user, string badgeName) external view returns (bool)",
+  "function getHandle(address user) external view returns (string)",
+  "function resolveHandle(string handle) external view returns (address)",
+  "function isProfileActive(address user) external view returns (bool)",
+  "function getTrustScore(address user) external view returns (uint256)"
+];
+var BADGE_TYPES = {
+  KYC_L1: "KYC_L1",
+  KYC_L2: "KYC_L2",
+  ACADEMIC_ISSUER: "ACADEMIC_ISSUER",
+  VERIFIED_CREATOR: "VERIFIED_CREATOR",
+  GOV_AGENCY: "GOV_AGENCY",
+  LEGAL_ENTITY: "LEGAL_ENTITY",
+  ISO_9001_CERTIFIED: "ISO_9001_CERTIFIED"
 };
 var IPFS_DEFAULT_TIMEOUT = 3e4;
 var IPFS_MAX_FILE_SIZE = MAX_ENCRYPTED_FILE_SIZE;
@@ -331,9 +367,26 @@ var EncryptedAttestation = class {
 };
 
 // src/certid.ts
+var import_ethers2 = require("ethers");
+var STANDARD_BADGES = [
+  "KYC_L1",
+  "KYC_L2",
+  "ACADEMIC_ISSUER",
+  "VERIFIED_CREATOR",
+  "GOV_AGENCY",
+  "LEGAL_ENTITY",
+  "ISO_9001_CERTIFIED"
+];
 var CertID = class {
-  constructor(apiUrl) {
+  constructor(apiUrl, contract) {
     this.apiUrl = apiUrl;
+    this.contract = contract ?? null;
+  }
+  /**
+   * Set the CertID contract instance for direct blockchain queries
+   */
+  setContract(contract) {
+    this.contract = contract;
   }
   /**
    * Get a CertID profile by address
@@ -496,6 +549,173 @@ Timestamp: ${(/* @__PURE__ */ new Date()).toISOString()}`;
     const message = `Verify ${request.platform}: ${request.handle}`;
     return signer.signMessage(message);
   }
+  // ============ Soulbound Token (SBT) Badge Methods ============
+  /**
+   * Get full identity including badges and trust score
+   * @param address - Wallet address to look up
+   */
+  async getFullIdentity(address) {
+    if (!this.contract) {
+      const profile = await this.getProfile(address);
+      return {
+        address,
+        handle: profile.handle || profile.name || "Anonymous",
+        metadata: profile.metadataURI || "",
+        isVerified: profile.verified,
+        isInstitutional: profile.entityType === 1,
+        trustScore: profile.trustScore || 0,
+        entityType: profile.entityType || 0,
+        badges: profile.badges || [],
+        isKYC: profile.badges?.includes("KYC_L1") || profile.badges?.includes("KYC_L2") || false,
+        isAcademic: profile.badges?.includes("ACADEMIC_ISSUER") || false,
+        isCreator: profile.badges?.includes("VERIFIED_CREATOR") || false
+      };
+    }
+    const contract = this.contract;
+    try {
+      const profile = await contract.getProfile(address);
+      const badges = await this.checkStandardBadges(address);
+      return {
+        address,
+        handle: profile.handle || "Anonymous",
+        metadata: profile.metadataURI,
+        isVerified: profile.isVerified,
+        isInstitutional: Number(profile.entityType) === 1,
+        trustScore: Number(profile.trustScore),
+        entityType: Number(profile.entityType),
+        badges,
+        isKYC: badges.includes("KYC_L1") || badges.includes("KYC_L2"),
+        isAcademic: badges.includes("ACADEMIC_ISSUER"),
+        isCreator: badges.includes("VERIFIED_CREATOR")
+      };
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * Check all standard badges for an address
+   */
+  async checkStandardBadges(address) {
+    if (!this.contract) return [];
+    const contract = this.contract;
+    const badges = [];
+    const checks = await Promise.all(
+      STANDARD_BADGES.map(async (badge) => {
+        try {
+          const hasBadge = await contract.hasBadge(address, badge);
+          return { badge, hasBadge };
+        } catch {
+          return { badge, hasBadge: false };
+        }
+      })
+    );
+    for (const { badge, hasBadge } of checks) {
+      if (hasBadge) badges.push(badge);
+    }
+    return badges;
+  }
+  /**
+   * Check if address has a specific badge
+   */
+  async hasBadge(address, badgeName) {
+    if (!this.contract) return false;
+    const contract = this.contract;
+    try {
+      return await contract.hasBadge(address, badgeName);
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * Get trust score for an address
+   */
+  async getTrustScore(address) {
+    if (!this.contract) {
+      const profile = await this.getProfile(address);
+      return profile.trustScore || 0;
+    }
+    const contract = this.contract;
+    try {
+      return Number(await contract.getTrustScore(address));
+    } catch {
+      return 0;
+    }
+  }
+  /**
+   * Resolve a handle to an address
+   */
+  async resolveHandle(handle) {
+    if (!this.contract) return null;
+    const contract = this.contract;
+    try {
+      const addr = await contract.resolveHandle(handle);
+      return addr === import_ethers2.ethers.ZeroAddress ? null : addr;
+    } catch {
+      return null;
+    }
+  }
+  // ============ Helper Methods (Per Cert ID Evolution Spec) ============
+  /**
+   * Get detailed profile with full identity resolution
+   * This is the primary method for displaying identity info in block explorer
+   * @param address - Wallet address to look up
+   * @returns Detailed profile with display-ready information
+   */
+  async getDetailedProfile(address) {
+    const identity = await this.getFullIdentity(address);
+    const badgeDisplay = {
+      KYC_L1: { name: "KYC Level 1", icon: "\u{1FAAA}" },
+      KYC_L2: { name: "KYC Level 2", icon: "\u{1F6E1}\uFE0F" },
+      ACADEMIC_ISSUER: { name: "Academic Issuer", icon: "\u{1F393}" },
+      VERIFIED_CREATOR: { name: "Verified Creator", icon: "\u2728" },
+      GOV_AGENCY: { name: "Government Agency", icon: "\u{1F3DB}\uFE0F" },
+      LEGAL_ENTITY: { name: "Legal Entity", icon: "\u2696\uFE0F" },
+      ISO_9001_CERTIFIED: { name: "ISO 9001", icon: "\u{1F4CB}" }
+    };
+    const entityTypes = {
+      0: "Individual",
+      1: "Institution",
+      2: "System Admin",
+      3: "Bot"
+    };
+    if (identity) {
+      return {
+        address,
+        displayName: identity.handle !== "Anonymous" ? identity.handle : this.truncateAddress(address),
+        handle: identity.handle !== "Anonymous" ? identity.handle : null,
+        avatarUrl: identity.metadata || null,
+        isVerified: identity.isVerified,
+        isVerifiedInstitution: identity.isInstitutional && identity.isVerified,
+        trustScore: identity.trustScore,
+        badges: identity.badges.map((b) => ({
+          id: b,
+          name: badgeDisplay[b]?.name || b,
+          icon: badgeDisplay[b]?.icon || "\u{1F3F7}\uFE0F"
+        })),
+        entityType: entityTypes[identity.entityType] || "Unknown",
+        profileUrl: `https://c3rt.org/cert-id?address=${address}`
+      };
+    }
+    return {
+      address,
+      displayName: this.truncateAddress(address),
+      handle: null,
+      avatarUrl: null,
+      isVerified: false,
+      isVerifiedInstitution: false,
+      trustScore: 0,
+      badges: [],
+      entityType: "Unknown",
+      profileUrl: `https://c3rt.org/cert-id?address=${address}`
+    };
+  }
+  /**
+   * Truncate address for display
+   */
+  truncateAddress(address) {
+    if (address.length <= 10) return address;
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }
 };
 
 // src/ipfs.ts
@@ -647,7 +867,7 @@ var CertClient = class {
       ipfsUrl: config?.ipfsUrl || "http://localhost:5001",
       chainId: config?.chainId || CERT_EVM_CHAIN_ID.toString()
     };
-    this.provider = new import_ethers2.ethers.JsonRpcProvider(this.config.rpcUrl);
+    this.provider = new import_ethers3.ethers.JsonRpcProvider(this.config.rpcUrl);
     this.ipfs = new IPFS({
       url: this.config.ipfsUrl,
       gateway: CERT_IPFS_GATEWAY
@@ -683,7 +903,7 @@ var CertClient = class {
    * @returns Wallet signer
    */
   createSigner(privateKey) {
-    return new import_ethers2.ethers.Wallet(privateKey, this.provider);
+    return new import_ethers3.ethers.Wallet(privateKey, this.provider);
   }
   /**
    * Register a new schema
@@ -773,26 +993,35 @@ var CertClient = class {
   }
 };
 
+// src/types.ts
+var EntityType = /* @__PURE__ */ ((EntityType2) => {
+  EntityType2[EntityType2["Individual"] = 0] = "Individual";
+  EntityType2[EntityType2["Institution"] = 1] = "Institution";
+  EntityType2[EntityType2["SystemAdmin"] = 2] = "SystemAdmin";
+  EntityType2[EntityType2["Bot"] = 3] = "Bot";
+  return EntityType2;
+})(EntityType || {});
+
 // src/utils.ts
-var import_ethers3 = require("ethers");
+var import_ethers4 = require("ethers");
 function generateUID(...data) {
   const combined = data.map((d) => {
     if (typeof d === "number") return d.toString();
-    if (d instanceof Uint8Array) return import_ethers3.ethers.hexlify(d);
+    if (d instanceof Uint8Array) return import_ethers4.ethers.hexlify(d);
     return d;
   }).join("");
-  return import_ethers3.ethers.keccak256(import_ethers3.ethers.toUtf8Bytes(combined));
+  return import_ethers4.ethers.keccak256(import_ethers4.ethers.toUtf8Bytes(combined));
 }
 function hashData(data) {
   if (typeof data === "string") {
-    return import_ethers3.ethers.keccak256(import_ethers3.ethers.toUtf8Bytes(data));
+    return import_ethers4.ethers.keccak256(import_ethers4.ethers.toUtf8Bytes(data));
   }
-  return import_ethers3.ethers.keccak256(data);
+  return import_ethers4.ethers.keccak256(data);
 }
 function validateAddress(address) {
   try {
     if (address.startsWith("0x")) {
-      return import_ethers3.ethers.isAddress(address);
+      return import_ethers4.ethers.isAddress(address);
     }
     if (address.startsWith("cert1")) {
       return address.length === 43;
@@ -820,15 +1049,19 @@ function parseCERT(amount) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  BADGE_TYPES,
   CERT_API_URL,
   CERT_CHAIN_ID,
+  CERT_ID_ABI,
   CERT_IPFS_GATEWAY,
   CERT_RPC_URL,
+  CONTRACT_ADDRESSES,
   CertClient,
   CertID,
   DEFAULT_SCHEMAS,
   EncryptedAttestation,
   Encryption,
+  EntityType,
   IPFS,
   formatCERT,
   generateUID,

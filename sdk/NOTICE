@@ -1,0 +1,79 @@
+CERT Blockchain SDK
+Copyright 2026 Brandon Guynn
+
+This product includes software developed by Brandon Guynn for the CERT Ecosystem.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+---
+
+This software contains components from the following open source projects:
+
+ethers.js (MIT License)
+Copyright (c) 2019 Richard Moore
+https://github.com/ethers-io/ethers.js
+
+@cosmjs (Apache-2.0 License)
+Copyright (c) 2020 Confio UO
+https://github.com/cosmos/cosmjs
+
+ipfs-http-client (MIT License / Apache-2.0 License)
+Copyright (c) Protocol Labs, Inc.
+https://github.com/ipfs/js-ipfs
+
+---
+
+TRADEMARK NOTICE
+
+"CERT", "CERT Blockchain", "CertID", and the CERT logo are trademarks of
+Brandon Guynn and the CERT Ecosystem. This license does not grant permission
+to use these trademarks except as required for reasonable and customary use
+in describing the origin of the Work and reproducing the content of this
+NOTICE file.
+
+Any derivative works or forks must not use the CERT name or logo in a way
+that suggests endorsement or affiliation without explicit written permission.
+
+---
+
+PATENT NOTICE
+
+This software is licensed under the Apache License 2.0, which includes an
+express grant of patent rights from contributors to users. See the LICENSE
+file for full details.
+
+If you institute patent litigation against any entity alleging that this
+software or a contribution incorporated within this software constitutes
+direct or contributory patent infringement, your patent license from the
+contributors shall terminate as of the date such litigation is filed.
+
+---
+
+ATTRIBUTION REQUIREMENTS
+
+If you distribute this software or derivative works, you MUST:
+
+1. Include a copy of the LICENSE file
+2. Include a copy of this NOTICE file
+3. Retain all copyright, patent, trademark, and attribution notices
+4. State any significant changes made to the files
+
+Failure to comply with these requirements will result in termination of
+your license to use this software.
+
+---
+
+For questions about licensing, commercial use, or trademark permissions:
+Contact: dev@c3rt.org
+Website: https://c3rt.org
+

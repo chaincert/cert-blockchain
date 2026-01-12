@@ -73,6 +73,10 @@ func MakeEncodingConfig() EncodingConfig {
 
 // NewRootCmd creates the root command for the CERT Blockchain daemon
 func NewRootCmd() *cobra.Command {
+	// Patch module basics so Cosmos SDK module tx/query commands can be safely
+	// constructed via app.ModuleBasics.AddTxCommands/AddQueryCommands.
+	patchAppModuleBasicsForCLI()
+
 	encodingConfig := MakeEncodingConfig()
 
 	initClientCtx := client.Context{}.

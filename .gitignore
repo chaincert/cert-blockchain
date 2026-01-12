@@ -1,0 +1,169 @@
+# CERT Blockchain .gitignore
+
+# ========================================
+# CRITICAL: Private Keys & Secrets
+# ========================================
+# NEVER commit these files!
+.env
+.env.api
+.env.local
+.env.*.local
+*.pem
+*.key
+*_key.json
+priv_validator_key.json
+node_key.json
+keyring-test/
+keyring-file/
+
+# Blockchain data directories
+data/
+.certd/
+*.db
+*.db-shm
+*.db-wal
+
+# ========================================
+# Build Artifacts
+# ========================================
+# Go binaries
+certd
+certd.exe
+cert-api
+cert-api-linux
+*.exe
+*.dll
+*.so
+*.dylib
+build/
+dist/
+*.test
+*.out
+
+# Vendor
+vendor/
+
+# ========================================
+# Node.js (for SDK, contracts, services)
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-store/
+
+# SDK build outputs
+sdk/dist/
+sdk/node_modules/
+sdk/*.tgz
+
+# Contracts
+contracts/node_modules/
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+contracts/.openzeppelin/
+
+# Services
+services/*/node_modules/
+services/*/dist/
+services/*/*.log
+
+# ========================================
+# Docker & Deployment
+# ========================================
+docker-compose.override.yml
+*.log
+logs/
+
+# ========================================
+# Database
+# ========================================
+*.sql
+*.sqlite
+*.sqlite3
+postgres-data/
+pgdata/
+
+# ========================================
+# IPFS
+# ========================================
+ipfs-data/
+.ipfs/
+
+# ========================================
+# IDE & Editor
+# ========================================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ========================================
+# OS
+# ========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ========================================
+# Testing
+# ========================================
+coverage/
+*.coverprofile
+.nyc_output/
+test-results/
+
+# ========================================
+# Temporary Files
+# ========================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.old
+*~
+
+# ========================================
+# Certificates & SSL
+# ========================================
+*.crt
+*.cer
+*.p12
+*.pfx
+ssl/
+
+# ========================================
+# Backup Files
+# ========================================
+*.backup.*
+backup/
+backups/
+
+# ========================================
+# Generated Documentation
+# ========================================
+# Keep markdown docs, but ignore generated HTML
+docs/build/
+site/
+
+# ========================================
+# Keep These Files
+# ========================================
+# Example configurations should be committed
+!.env.example
+!.env.api.example
+!docker-compose.yml
+

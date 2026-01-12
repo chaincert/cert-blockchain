@@ -1,0 +1,65 @@
+[Unit]
+Description=CERT Blockchain API Server
+Documentation=https://c3rt.org/docs
+After=network.target postgresql.service docker.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/cert-blockchain
+
+# Environment configuration
+# Database URL - update password if different
+Environment="DATABASE_URL=postgres://cert:certpass@localhost:5432/certid?sslmode=disable"
+Environment="API_HOST=0.0.0.0"
+Environment="API_PORT=3000"
+Environment="CHAIN_RPC_URL=http://localhost:26657"
+Environment="EVM_RPC_URL=http://localhost:8545"
+Environment="IPFS_GATEWAY=https://ipfs.c3rt.org"
+Environment="JWT_SECRET=change-me-in-production"
+Environment="TESTNET_STAKING_APY_PERCENT=10"
+
+# certd tx signing configuration (for faucet and attestation creation)
+Environment="CERT_TX_CHAIN_ID=951753"
+Environment="CERT_TX_FROM=validator"
+Environment="CERT_TX_KEYRING_BACKEND=test"
+Environment="CERT_TX_HOME=/root/.certd"
+Environment="CERT_TX_NODE=tcp://localhost:26657"
+Environment="CERT_TX_GAS=200000"
+Environment="CERT_TX_FEES=10000ucert"
+Environment="CERT_TX_BROADCAST_MODE=block"
+
+# Load environment from file if exists (overrides above)
+EnvironmentFile=-/opt/cert-blockchain/.env.api
+
+# Executable
+ExecStart=/opt/cert-blockchain/cert-api-linux
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cert-blockchain /tmp
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cert-api
+
+[Install]
+WantedBy=multi-user.target
+

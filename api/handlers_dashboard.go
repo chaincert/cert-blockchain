@@ -1,19 +1,45 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/types/bech32"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
+
+// restClient is a shared HTTP client for REST/LCD queries
+var restClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+// getRESTBaseURL returns the base URL for Cosmos REST/LCD API
+// Uses COSMOS_REST_URL env var if set, otherwise defaults to localhost
+func getRESTBaseURL() string {
+	if url := os.Getenv("COSMOS_REST_URL"); url != "" {
+		return strings.TrimSuffix(url, "/")
+	}
+	return "http://localhost:1317"
+}
+
+// getRPCBaseURL returns the base URL for CometBFT RPC API
+// Uses COSMOS_RPC_URL env var if set, otherwise defaults to localhost
+func getRPCBaseURL() string {
+	if url := os.Getenv("COSMOS_RPC_URL"); url != "" {
+		return strings.TrimSuffix(url, "/")
+	}
+	return "http://localhost:26657"
+}
 
 // NOTE: These endpoints are primarily for the web UX. They intentionally:
 // - accept both `cert1...` (bech32) and `0x...` (EVM hex) addresses
@@ -272,6 +298,84 @@ func (s *Server) getTestnetAPYPercent() float64 {
 }
 
 func (s *Server) queryWalletBalanceUcert(bech32Addr string) (string, error) {
+	// Due to IAVL v1.x bug in Cosmos SDK v0.50.x, state queries fail with
+	// "version does not exist" error. Use database fallback for faucet balances.
+
+	// Try database fallback first (tracks faucet disbursements)
+	if s.db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		faucetBal, err := s.db.GetFaucetBalance(ctx, bech32Addr)
+		if err == nil && faucetBal > 0 {
+			return fmt.Sprintf("%d", faucetBal), nil
+		}
+	}
+
+	// Cosmos SDK v0.50.x has a race condition where querying at the latest height
+	// often fails with "version does not exist". Workaround: query at height - 1
+
+	// First get current height
+	heightURL := fmt.Sprintf("%s/status", getRPCBaseURL())
+	heightResp, err := restClient.Get(heightURL)
+	if err != nil {
+		return "0", nil
+	}
+	defer heightResp.Body.Close()
+
+	heightBody, _ := io.ReadAll(heightResp.Body)
+	var statusRes struct {
+		Result struct {
+			SyncInfo struct {
+				LatestBlockHeight string `json:"latest_block_height"`
+			} `json:"sync_info"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(heightBody, &statusRes); err != nil {
+		return "0", nil
+	}
+
+	// Parse height and use height - 2 for safety margin
+	var height int64
+	fmt.Sscanf(statusRes.Result.SyncInfo.LatestBlockHeight, "%d", &height)
+	if height > 2 {
+		height -= 2
+	}
+
+	// Query balance at a past height
+	url := fmt.Sprintf("%s/cosmos/bank/v1beta1/balances/%s?height=%d",
+		getRESTBaseURL(), bech32Addr, height)
+
+	resp, err := restClient.Get(url)
+	if err != nil {
+		return "0", nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// If past height also fails, return 0
+		return "0", nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "0", nil
+	}
+
+	var res walletBalanceResult
+	if err := json.Unmarshal(body, &res); err != nil {
+		return "0", nil
+	}
+
+	for _, b := range res.Balances {
+		if b.Denom == "ucert" {
+			return b.Amount, nil
+		}
+	}
+	return "0", nil
+}
+
+// queryWalletBalanceUcertCLI is a fallback using CLI (for older SDK versions or when LCD is disabled)
+func (s *Server) queryWalletBalanceUcertCLI(bech32Addr string) (string, error) {
 	var res walletBalanceResult
 	if err := s.execCertdQueryJSON(&res, "bank", "balances", bech32Addr); err != nil {
 		return "", err
@@ -285,6 +389,33 @@ func (s *Server) queryWalletBalanceUcert(bech32Addr string) (string, error) {
 }
 
 func (s *Server) queryStakingDelegations(bech32Addr string) (stakingDelegationsResult, error) {
+	// Use REST/LCD API (port 1317) for staking delegation queries
+	url := fmt.Sprintf("%s/cosmos/staking/v1beta1/delegations/%s", getRESTBaseURL(), bech32Addr)
+
+	resp, err := restClient.Get(url)
+	if err != nil {
+		return s.queryStakingDelegationsCLI(bech32Addr)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return s.queryStakingDelegationsCLI(bech32Addr)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return s.queryStakingDelegationsCLI(bech32Addr)
+	}
+
+	var res stakingDelegationsResult
+	if err := json.Unmarshal(body, &res); err != nil {
+		return s.queryStakingDelegationsCLI(bech32Addr)
+	}
+	return res, nil
+}
+
+// queryStakingDelegationsCLI is a fallback using CLI
+func (s *Server) queryStakingDelegationsCLI(bech32Addr string) (stakingDelegationsResult, error) {
 	var res stakingDelegationsResult
 	if err := s.execCertdQueryJSON(&res, "staking", "delegations", bech32Addr); err != nil {
 		return stakingDelegationsResult{}, err
@@ -373,10 +504,29 @@ func normalizeMaybeAddress(s string) string {
 }
 
 func (s *Server) execCertdQueryJSON(out any, queryArgs ...string) error {
-	// Run inside docker: `certd query ... --node tcp://localhost:26657 --output json`
+	// Run inside docker: `certd query <module> <subcommand> [args...] --flags`
+	//
+	// NOTE: certd module queries (notably our attestation module) must use gRPC.
+	// The legacy `--node` path can fail with "unknown query path" once modules
+	// are served exclusively via gRPC Query services.
+	//
+	// Command structure: certd query <queryArgs...> <flags>
+	// Flags must come AFTER subcommands for Cosmos SDK CLI.
 	args := []string{"query"}
+
+	// Append query args first (module, subcommand, address, etc.)
 	args = append(args, queryArgs...)
-	args = append(args, "--node", "tcp://localhost:26657", "--output", "json")
+
+	// Then append connection flags
+	useGRPC := len(queryArgs) > 0 && queryArgs[0] == "attestation"
+	if useGRPC {
+		args = append(args, "--grpc-addr", "localhost:9090", "--grpc-insecure")
+	} else {
+		args = append(args, "--node", "tcp://localhost:26657")
+	}
+
+	// Always request JSON output.
+	args = append(args, "-o", "json")
 
 	cmd := exec.Command("docker", append([]string{"exec", "certd", "certd"}, args...)...)
 	buf, err := cmd.CombinedOutput()

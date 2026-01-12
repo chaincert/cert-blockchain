@@ -49,15 +49,42 @@ interface Schema {
 interface CertIDProfile {
     address: string;
     name?: string;
+    handle?: string;
     bio?: string;
     avatarUrl?: string;
+    metadataURI?: string;
     publicKey?: string;
     socialLinks?: Record<string, string>;
     credentials?: string[];
+    badges?: string[];
     verified: boolean;
+    isVerified?: boolean;
     verificationLevel: number;
+    trustScore?: number;
+    entityType?: EntityType;
+    isActive?: boolean;
     createdAt: number;
     updatedAt: number;
+}
+declare enum EntityType {
+    Individual = 0,
+    Institution = 1,
+    SystemAdmin = 2,
+    Bot = 3
+}
+type BadgeType = 'KYC_L1' | 'KYC_L2' | 'ACADEMIC_ISSUER' | 'VERIFIED_CREATOR' | 'GOV_AGENCY' | 'LEGAL_ENTITY' | 'ISO_9001_CERTIFIED';
+interface FullIdentity {
+    address: string;
+    handle: string;
+    metadata: string;
+    isVerified: boolean;
+    isInstitutional: boolean;
+    trustScore: number;
+    entityType: EntityType;
+    badges: string[];
+    isKYC: boolean;
+    isAcademic: boolean;
+    isCreator: boolean;
 }
 interface EncryptionKeys {
     publicKey: string;
@@ -210,11 +237,17 @@ declare class EncryptedAttestation {
 /**
  * CertID module for CERT Blockchain SDK
  * Implements decentralized identity per Whitepaper CertID Section
+ * Includes Soulbound Token (SBT) badge support and trust scores
  */
 
 declare class CertID {
     private apiUrl;
-    constructor(apiUrl: string);
+    private contract;
+    constructor(apiUrl: string, contract?: ethers.Contract);
+    /**
+     * Set the CertID contract instance for direct blockchain queries
+     */
+    setContract(contract: ethers.Contract): void;
     /**
      * Get a CertID profile by address
      *
@@ -286,6 +319,53 @@ declare class CertID {
     generateSocialProof(address: string, platform: string): string;
     private signProfileUpdate;
     private signSocialVerification;
+    /**
+     * Get full identity including badges and trust score
+     * @param address - Wallet address to look up
+     */
+    getFullIdentity(address: string): Promise<FullIdentity | null>;
+    /**
+     * Check all standard badges for an address
+     */
+    checkStandardBadges(address: string): Promise<string[]>;
+    /**
+     * Check if address has a specific badge
+     */
+    hasBadge(address: string, badgeName: BadgeType): Promise<boolean>;
+    /**
+     * Get trust score for an address
+     */
+    getTrustScore(address: string): Promise<number>;
+    /**
+     * Resolve a handle to an address
+     */
+    resolveHandle(handle: string): Promise<string | null>;
+    /**
+     * Get detailed profile with full identity resolution
+     * This is the primary method for displaying identity info in block explorer
+     * @param address - Wallet address to look up
+     * @returns Detailed profile with display-ready information
+     */
+    getDetailedProfile(address: string): Promise<{
+        address: string;
+        displayName: string;
+        handle: string | null;
+        avatarUrl: string | null;
+        isVerified: boolean;
+        isVerifiedInstitution: boolean;
+        trustScore: number;
+        badges: Array<{
+            id: string;
+            name: string;
+            icon: string;
+        }>;
+        entityType: string;
+        profileUrl: string;
+    }>;
+    /**
+     * Truncate address for display
+     */
+    private truncateAddress;
 }
 
 /**
@@ -373,11 +453,6 @@ declare class CertClient {
     }>;
 }
 
-/**
- * Encryption module for CERT Blockchain SDK
- * Implements the 5-step encryption flow per Whitepaper Section 3.2
- */
-
 declare class Encryption {
     /**
      * Generate a new key pair for encryption
@@ -434,19 +509,34 @@ declare class Encryption {
  * Per Whitepaper Sections 4, 5, 9, and 12
  */
 declare const CERT_CHAIN_ID = "cert-mainnet-1";
-declare const CERT_RPC_URL = "https://rpc.certblockchain.io";
-declare const CERT_API_URL = "https://api.certblockchain.io";
-declare const CERT_IPFS_GATEWAY = "https://ipfs.certblockchain.io";
+declare const CERT_RPC_URL = "https://rpc.c3rt.org";
+declare const CERT_API_URL = "https://api.c3rt.org/api/v1";
+declare const CERT_IPFS_GATEWAY = "https://ipfs.c3rt.org";
 declare const DEFAULT_SCHEMAS: {
     BUSINESS_DOCUMENT: string;
     IDENTITY_VERIFICATION: string;
     CREDENTIAL: string;
     CERTIFICATE: string;
 };
+declare const CONTRACT_ADDRESSES: {
+    SCHEMA_REGISTRY: string;
+    EAS: string;
+    ENCRYPTED_ATTESTATION: string;
+    CERT_TOKEN: string;
+    CERT_ID: string;
+    CHAIN_CERTIFY: string;
+};
+declare const CERT_ID_ABI: string[];
+declare const BADGE_TYPES: {
+    KYC_L1: string;
+    KYC_L2: string;
+    ACADEMIC_ISSUER: string;
+    VERIFIED_CREATOR: string;
+    GOV_AGENCY: string;
+    LEGAL_ENTITY: string;
+    ISO_9001_CERTIFIED: string;
+};
 
-/**
- * Utility functions for CERT Blockchain SDK
- */
 /**
  * Generate a unique identifier (UID) for attestations
  *
@@ -483,4 +573,4 @@ declare function formatCERT(amount: bigint | string | number): string;
  */
 declare function parseCERT(amount: string | number): bigint;
 
-export { type AttestationData, CERT_API_URL, CERT_CHAIN_ID, CERT_IPFS_GATEWAY, CERT_RPC_URL, CertClient, CertID, type CertIDProfile, type ClientConfig, DEFAULT_SCHEMAS, EncryptedAttestation, type EncryptedAttestationData, Encryption, type EncryptionKeys, IPFS, type IPFSConfig, type Recipient, type Schema, formatCERT, generateUID, hashData, parseCERT, validateAddress };
+export { type AttestationData, BADGE_TYPES, type BadgeType, CERT_API_URL, CERT_CHAIN_ID, CERT_ID_ABI, CERT_IPFS_GATEWAY, CERT_RPC_URL, CONTRACT_ADDRESSES, CertClient, CertID, type CertIDProfile, type ClientConfig, DEFAULT_SCHEMAS, EncryptedAttestation, type EncryptedAttestationData, Encryption, type EncryptionKeys, EntityType, type FullIdentity, IPFS, type IPFSConfig, type Recipient, type Schema, formatCERT, generateUID, hashData, parseCERT, validateAddress };
