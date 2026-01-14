@@ -26,9 +26,9 @@ data/
 # ========================================
 # Build Artifacts
 # ========================================
-# Go binaries
-certd
-certd.exe
+# Go binaries (root level only to not ignore cmd/certd/)
+/certd
+/certd.exe
 cert-api
 cert-api-linux
 *.exe
