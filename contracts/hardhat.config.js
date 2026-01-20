@@ -3,7 +3,7 @@ require("@nomicfoundation/hardhat-toolbox");
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.19",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
@@ -16,7 +16,7 @@ module.exports = {
     cert: {
       url: process.env.CERT_RPC_URL || "http://localhost:8545",
       chainId: 11611,
-      accounts: process.env.DEPLOYER_PRIVATE_KEY 
+      accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
         : [],
       gasPrice: "auto",
@@ -25,7 +25,7 @@ module.exports = {
     certTestnet: {
       url: process.env.CERT_TESTNET_RPC_URL || "http://localhost:8545",
       chainId: 11612,
-      accounts: process.env.DEPLOYER_PRIVATE_KEY 
+      accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
         : [],
     },
@@ -35,7 +35,7 @@ module.exports = {
     },
   },
   paths: {
-    sources: "./",
+    sources: "./sol",
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",

@@ -1,4 +1,5 @@
 const hre = require("hardhat");
+const fs = require("fs");
 
 async function main() {
   console.log("Deploying CertID contract to CERT blockchain...");
@@ -33,8 +34,6 @@ async function main() {
   console.log("  BADGE_CREATOR:", await certID.BADGE_CREATOR());
   console.log("  BADGE_GOV:", await certID.BADGE_GOV());
 
-  // Write deployment info to file
-  const fs = require("fs");
   const deploymentInfo = {
     network: hre.network.name,
     chainId: hre.network.config.chainId,

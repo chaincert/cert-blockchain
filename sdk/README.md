@@ -116,6 +116,59 @@ const profileByAddress = await client.certid.getByAddress(
 );
 ```
 
+### CertID - Direct EVM Contract Interaction
+
+For direct interaction with the CertID smart contract on the CERT EVM chain:
+
+```typescript
+import { ethers } from 'ethers';
+import { CertID, CONTRACT_ADDRESSES, CERT_ID_ABI } from '@certblockchain/sdk';
+
+// Connect to CERT EVM chain
+const provider = new ethers.JsonRpcProvider('https://evm.c3rt.org');
+const signer = new ethers.Wallet(privateKey, provider);
+
+// Initialize CertID with signer - automatically uses deployed contract address
+const certId = new CertID('https://api.c3rt.org', signer);
+
+// Or specify a custom contract address
+const certIdCustom = new CertID(
+  'https://api.c3rt.org',
+  signer,
+  '0xYourCustomContractAddress'
+);
+
+// Get full identity with badges and trust score
+const identity = await certId.getFullIdentity('0x742d35Cc...');
+console.log('Handle:', identity.handle);
+console.log('Trust Score:', identity.trustScore);
+console.log('Badges:', identity.badges);
+console.log('Is KYC Verified:', identity.isKYC);
+
+// Check for specific badge
+const hasKYC = await certId.hasBadge('0x742d35Cc...', 'KYC_L1');
+
+// Get trust score
+const trustScore = await certId.getTrustScore('0x742d35Cc...');
+
+// Resolve handle to address
+const address = await certId.resolveHandle('alice.cert');
+
+// Get detailed profile for display (includes badge icons)
+const profile = await certId.getDetailedProfile('0x742d35Cc...');
+console.log('Display Name:', profile.displayName);
+console.log('Badges:', profile.badges.map(b => `${b.icon} ${b.name}`).join(', '));
+```
+
+**Available Badge Types:**
+- `KYC_L1` - Basic KYC verification
+- `KYC_L2` - Enhanced KYC verification  
+- `ACADEMIC_ISSUER` - Academic institution
+- `VERIFIED_CREATOR` - Verified content creator
+- `GOV_AGENCY` - Government agency
+- `LEGAL_ENTITY` - Registered legal entity
+- `ISO_9001_CERTIFIED` - ISO 9001 certified organization
+
 ## Core Concepts
 
 ### Encrypted Attestations

@@ -30,6 +30,7 @@ import type {
   BadgeType,
   EntityType,
 } from './types';
+import { CERT_ID_ABI, CONTRACT_ADDRESSES } from './constants';
 
 // Standard badges to check
 const STANDARD_BADGES = [
@@ -46,9 +47,19 @@ export class CertID {
   private apiUrl: string;
   private contract: ethers.Contract | null;
 
-  constructor(apiUrl: string, contract?: ethers.Contract) {
+  constructor(apiUrl: string, contractOrSigner?: ethers.Contract | ethers.Signer | ethers.Provider, contractAddress?: string) {
     this.apiUrl = apiUrl;
-    this.contract = contract ?? null;
+
+    if (contractOrSigner) {
+      if (contractOrSigner instanceof ethers.Contract) {
+        this.contract = contractOrSigner;
+      } else {
+        const address = contractAddress || CONTRACT_ADDRESSES.CERT_ID;
+        this.contract = new ethers.Contract(address, CERT_ID_ABI, contractOrSigner);
+      }
+    } else {
+      this.contract = null;
+    }
   }
 
   /**

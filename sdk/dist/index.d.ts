@@ -243,7 +243,7 @@ declare class EncryptedAttestation {
 declare class CertID {
     private apiUrl;
     private contract;
-    constructor(apiUrl: string, contract?: ethers.Contract);
+    constructor(apiUrl: string, contractOrSigner?: ethers.Contract | ethers.Signer | ethers.Provider, contractAddress?: string);
     /**
      * Set the CertID contract instance for direct blockchain queries
      */

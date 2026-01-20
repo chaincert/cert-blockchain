@@ -185,23 +185,50 @@ var CONTRACT_ADDRESSES = {
   EAS: "0x0000000000000000000000000000000000000002",
   ENCRYPTED_ATTESTATION: "0x0000000000000000000000000000000000000003",
   CERT_TOKEN: "0x0000000000000000000000000000000000000004",
-  CERT_ID: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+  CERT_ID: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   CHAIN_CERTIFY: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 };
 var CERT_ID_ABI = [
-  "function registerProfile(string handle, string metadataURI, uint8 entityType) external",
-  "function updateMetadata(string metadataURI) external",
-  "function awardBadge(address user, string badgeName) external",
-  "function revokeBadge(address user, string badgeName) external",
-  "function updateTrustScore(address user, uint256 score) external",
-  "function incrementTrustScore(address user, uint256 amount) external",
-  "function setVerificationStatus(address user, bool verified) external",
-  "function getProfile(address user) external view returns (string handle, string metadataURI, bool isVerified, uint256 trustScore, uint8 entityType, bool isActive)",
-  "function hasBadge(address user, string badgeName) external view returns (bool)",
-  "function getHandle(address user) external view returns (string)",
-  "function resolveHandle(string handle) external view returns (address)",
-  "function isProfileActive(address user) external view returns (bool)",
-  "function getTrustScore(address user) external view returns (uint256)"
+  "constructor()",
+  "error OwnableInvalidOwner(address owner)",
+  "error OwnableUnauthorizedAccount(address account)",
+  "error ReentrancyGuardReentrantCall()",
+  "event BadgeAwarded(address indexed user, bytes32 indexed badgeId, string badgeName)",
+  "event BadgeRevoked(address indexed user, bytes32 indexed badgeId)",
+  "event OracleAuthorized(address indexed oracle)",
+  "event OracleRevoked(address indexed oracle)",
+  "event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
+  "event ProfileCreated(address indexed user, string handle)",
+  "event ProfileUpdated(address indexed user, string handle)",
+  "event TrustScoreUpdated(address indexed user, uint256 oldScore, uint256 newScore)",
+  "event VerificationStatusChanged(address indexed user, bool isVerified)",
+  "function BADGE_ACADEMIC() view returns (bytes32)",
+  "function BADGE_CREATOR() view returns (bytes32)",
+  "function BADGE_GOV() view returns (bytes32)",
+  "function BADGE_ISO9001() view returns (bytes32)",
+  "function BADGE_KYC_L1() view returns (bytes32)",
+  "function BADGE_KYC_L2() view returns (bytes32)",
+  "function BADGE_LEGAL() view returns (bytes32)",
+  "function authorizeOracle(address _oracle)",
+  "function authorizedOracles(address) view returns (bool)",
+  "function awardBadge(address _user, string _badgeName)",
+  "function getHandle(address _user) view returns (string)",
+  "function getProfile(address _user) view returns (string handle, string metadataURI, bool isVerified, uint256 trustScore, uint8 entityType, bool isActive)",
+  "function getTrustScore(address _user) view returns (uint256)",
+  "function hasBadge(address _user, string _badgeName) view returns (bool)",
+  "function hasBadgeById(address _user, bytes32 _badgeId) view returns (bool)",
+  "function incrementTrustScore(address _user, uint256 _amount)",
+  "function isProfileActive(address _user) view returns (bool)",
+  "function owner() view returns (address)",
+  "function registerProfile(string _handle, string _metadataURI, uint8 _entityType)",
+  "function renounceOwnership()",
+  "function resolveHandle(string _handle) view returns (address)",
+  "function revokeBadge(address _user, string _badgeName)",
+  "function revokeOracle(address _oracle)",
+  "function setVerificationStatus(address _user, bool _verified)",
+  "function transferOwnership(address newOwner)",
+  "function updateMetadata(string _metadataURI)",
+  "function updateTrustScore(address _user, uint256 _score)"
 ];
 var BADGE_TYPES = {
   KYC_L1: "KYC_L1",
@@ -378,9 +405,18 @@ var STANDARD_BADGES = [
   "ISO_9001_CERTIFIED"
 ];
 var CertID = class {
-  constructor(apiUrl, contract) {
+  constructor(apiUrl, contractOrSigner, contractAddress) {
     this.apiUrl = apiUrl;
-    this.contract = contract ?? null;
+    if (contractOrSigner) {
+      if (contractOrSigner instanceof import_ethers2.ethers.Contract) {
+        this.contract = contractOrSigner;
+      } else {
+        const address = contractAddress || CONTRACT_ADDRESSES.CERT_ID;
+        this.contract = new import_ethers2.ethers.Contract(address, CERT_ID_ABI, contractOrSigner);
+      }
+    } else {
+      this.contract = null;
+    }
   }
   /**
    * Set the CertID contract instance for direct blockchain queries
