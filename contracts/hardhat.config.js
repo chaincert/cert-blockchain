@@ -15,7 +15,7 @@ module.exports = {
     // Local CERT blockchain (Ethermint JSON-RPC)
     cert: {
       url: process.env.CERT_RPC_URL || "http://localhost:8545",
-      chainId: 11611,
+      chainId: parseInt(process.env.CERT_CHAIN_ID || "4283207343"),
       accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
         : [],

@@ -263,11 +263,31 @@ func NewCertApp(
 	validatorAddressCodec := address.NewBech32Codec(AccountAddressPrefix + "valoper")
 
 	// Create interface registry with proper signing options (required for address conversion)
+	// IMPORTANT: Must include CustomGetSigners for MsgEthereumTx to handle EVM transactions
 	interfaceRegistry, err := codectypes.NewInterfaceRegistryWithOptions(codectypes.InterfaceRegistryOptions{
 		ProtoFiles: protoregistry.GlobalFiles,
 		SigningOptions: signing.Options{
 			AddressCodec:          addressCodec,
 			ValidatorAddressCodec: validatorAddressCodec,
+			CustomGetSigners: map[protoreflect.FullName]signing.GetSignersFunc{
+				"ethermint.evm.v1.MsgEthereumTx": func(msg proto.Message) ([][]byte, error) {
+					// Use reflection to avoid type assertion issues with Gogo proto vs Google proto compatibility
+					md := msg.ProtoReflect().Descriptor()
+					fromField := md.Fields().ByName("from")
+					if fromField != nil {
+						fromVal := msg.ProtoReflect().Get(fromField)
+						fromStr := fromVal.String()
+						if fromStr != "" {
+							sender, err := hex.DecodeString(fromStr)
+							if err == nil {
+								return [][]byte{sender}, nil
+							}
+							return [][]byte{[]byte(fromStr)}, nil
+						}
+					}
+					return nil, nil
+				},
+			},
 		},
 	})
 	if err != nil {
