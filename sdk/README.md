@@ -7,8 +7,11 @@ Official JavaScript/TypeScript SDK for the CERT Blockchain ecosystem. Build priv
 [![Tests](https://img.shields.io/badge/tests-98%20passing-brightgreen)](https://github.com/chaincertify/cert-blockchain)
 
 ## Features
+> [!IMPORTANT]
+> **Chain ID Notice**: The correct Chain ID is **`cert-testnet-1`**. Do not use `951753` unless you are specifically interacting with the EVM JSON-RPC directly.
 
 - 🔐 **Encrypted Attestations** - AES-256-GCM encryption with ECIES key wrapping
+
 - 🆔 **CertID Integration** - Decentralized identity management
 - 📦 **IPFS Storage** - Decentralized storage for encrypted data
 - ⛓️ **Dual Chain Support** - Works with both Cosmos and EVM chains

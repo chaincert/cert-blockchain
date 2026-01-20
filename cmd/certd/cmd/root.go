@@ -147,7 +147,7 @@ func initAppConfig() (string, interface{}) {
 			WsAddress  string `mapstructure:"ws-address"`
 			API        string `mapstructure:"api"`
 			GasCap     uint64 `mapstructure:"gas-cap"`
-			EVMTimeout int64  `mapstructure:"evm-timeout"`
+			EVMTimeout string `mapstructure:"evm-timeout"`
 		} `mapstructure:"json-rpc"`
 	}
 
@@ -164,7 +164,7 @@ func initAppConfig() (string, interface{}) {
 	customAppConfig.EVM.WsAddress = "0.0.0.0:8546"
 	customAppConfig.EVM.API = "eth,txpool,personal,net,debug,web3"
 	customAppConfig.EVM.GasCap = 25000000
-	customAppConfig.EVM.EVMTimeout = 5
+	customAppConfig.EVM.EVMTimeout = "5s"
 
 	customAppTemplate := serverconfig.DefaultConfigTemplate + `
 [json-rpc]
@@ -184,7 +184,7 @@ api = "{{ .EVM.API }}"
 gas-cap = {{ .EVM.GasCap }}
 
 # EVMTimeout is the timeout for eth_call
-evm-timeout = {{ .EVM.EVMTimeout }}
+evm-timeout = "{{ .EVM.EVMTimeout }}"
 `
 
 	return customAppTemplate, customAppConfig

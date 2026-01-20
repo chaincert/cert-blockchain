@@ -10,13 +10,19 @@ import (
 
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/gogoproto/grpc"
+	"encoding/hex"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/proto"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/x/tx/signing"
+	"cosmossdk.io/x/upgrade"
+	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
+	upgradetypes "cosmossdk.io/x/upgrade/types"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -34,6 +40,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	authante "github.com/cosmos/cosmos-sdk/x/auth/ante"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -46,6 +53,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	evmante "github.com/evmos/evmos/v20/app/ante/evm"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -73,6 +81,16 @@ import (
 	attestationmodule "github.com/chaincertify/certd/x/attestation"
 	attestationkeeper "github.com/chaincertify/certd/x/attestation/keeper"
 	attestationtypes "github.com/chaincertify/certd/x/attestation/types"
+
+	// Evmos imports
+	"github.com/evmos/evmos/v20/app/ante"
+	"github.com/evmos/evmos/v20/x/evm"
+	evmkeeper "github.com/evmos/evmos/v20/x/evm/keeper"
+	evmtypes "github.com/evmos/evmos/v20/x/evm/types"
+	"github.com/evmos/evmos/v20/x/feemarket"
+	feemarketkeeper "github.com/evmos/evmos/v20/x/feemarket/keeper"
+	feemarkettypes "github.com/evmos/evmos/v20/x/feemarket/types"
+	etherminttypes "github.com/evmos/evmos/v20/types"
 )
 
 const (
@@ -95,12 +113,16 @@ var (
 	ModuleBasics = module.NewBasicManager(
 		auth.AppModuleBasic{},
 		genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
+		upgrade.AppModuleBasic{},
 			BankModuleBasicGenesis{},
 			StakingModuleBasicGenesis{},
 		params.AppModuleBasic{},
 		consensus.AppModuleBasic{},
 		// Custom CERT modules
 		attestationmodule.AppModuleBasic{},
+		// Ethermint modules
+		evm.AppModuleBasic{},
+		feemarket.AppModuleBasic{},
 		// Add overrides for unused modules
 		SlashingModuleBasicGenesis{},
 		GovModuleBasicGenesis{},
@@ -113,9 +135,11 @@ var (
 		authtypes.FeeCollectorName:     nil,
 		stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
 		stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-		// Add permissions for new modules
+	// Add permissions for new modules
 		minttypes.ModuleName: {authtypes.Minter},
 		govtypes.ModuleName:  {authtypes.Burner},
+		evmtypes.ModuleName:  {authtypes.Minter, authtypes.Burner},
+		feemarkettypes.ModuleName: nil,
 	}
 )
 
@@ -139,6 +163,25 @@ func MakeEncodingConfig() (codec.Codec, codectypes.InterfaceRegistry, client.TxC
 		SigningOptions: signing.Options{
 			AddressCodec:          addressCodec,
 			ValidatorAddressCodec: validatorAddressCodec,
+			CustomGetSigners: map[protoreflect.FullName]signing.GetSignersFunc{
+				"ethermint.evm.v1.MsgEthereumTx": func(msg proto.Message) ([][]byte, error) {
+					// Use reflection to avoid type assertion issues with Gogo proto vs Google proto compatibility
+					md := msg.ProtoReflect().Descriptor()
+					fromField := md.Fields().ByName("from")
+					if fromField != nil {
+						fromVal := msg.ProtoReflect().Get(fromField)
+						fromStr := fromVal.String()
+						if fromStr != "" {
+							sender, err := hex.DecodeString(fromStr)
+							if err == nil {
+								return [][]byte{sender}, nil
+							}
+							return [][]byte{[]byte(fromStr)}, nil
+						}
+					}
+					return nil, nil
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -190,6 +233,11 @@ type CertApp struct {
 	GovKeeper      govkeeper.Keeper
 	MintKeeper     mintkeeper.Keeper
 	CrisisKeeper   crisiskeeper.Keeper
+	UpgradeKeeper  *upgradekeeper.Keeper
+
+	// Ethermint Keepers
+	EvmKeeper       *evmkeeper.Keeper
+	FeeMarketKeeper feemarketkeeper.Keeper
 
 	// Module Manager
 	ModuleManager *module.Manager
@@ -254,9 +302,12 @@ func NewCertApp(
 		slashingtypes.StoreKey,
 		govtypes.StoreKey,
 		minttypes.StoreKey,
+		evmtypes.StoreKey,
+		feemarkettypes.StoreKey,
+		upgradetypes.StoreKey,
 		// crisistypes.StoreKey, // Disabled - crisis module not in use
 	)
-	tkeys := storetypes.NewTransientStoreKeys(paramstypes.TStoreKey)
+	tkeys := storetypes.NewTransientStoreKeys(paramstypes.TStoreKey, evmtypes.TransientKey)
 	memKeys := storetypes.NewMemoryStoreKeys()
 
 	// Create the CertApp instance
@@ -286,6 +337,8 @@ func NewCertApp(
 	certApp.ParamsKeeper.Subspace(slashingtypes.ModuleName)
 	certApp.ParamsKeeper.Subspace(govtypes.ModuleName)
 	certApp.ParamsKeeper.Subspace(minttypes.ModuleName)
+	certApp.ParamsKeeper.Subspace(evmtypes.ModuleName)
+	certApp.ParamsKeeper.Subspace(feemarkettypes.ModuleName)
 	// certApp.ParamsKeeper.Subspace(crisistypes.ModuleName)
 
 	// Create bech32 address codec for account keeper
@@ -385,6 +438,40 @@ func NewCertApp(
 			authtypes.NewModuleAddress(govtypes.ModuleName).String(), // governance authority
 		)
 
+	// Initialize Upgrade Keeper
+	certApp.UpgradeKeeper = upgradekeeper.NewKeeper(
+		nil, // skip-upgrade-heights
+		runtime.NewKVStoreService(keys[upgradetypes.StoreKey]),
+		appCodec,
+		"", // upgrade-info-path
+		certApp.BaseApp,
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(), // authority
+	)
+
+	// Initialize FeeMarket keeper
+	certApp.FeeMarketKeeper = feemarketkeeper.NewKeeper(
+		appCodec,
+		authtypes.NewModuleAddress(govtypes.ModuleName),
+		keys[feemarkettypes.StoreKey], // Evmos v20 uses raw StoreKey
+		tkeys[evmtypes.TransientKey],
+		certApp.GetSubspace(feemarkettypes.ModuleName),
+	)
+
+	// Initialize EVM keeper
+	certApp.EvmKeeper = evmkeeper.NewKeeper(
+		appCodec,
+		keys[evmtypes.StoreKey],       // Evmos v20 uses raw StoreKey
+		tkeys[evmtypes.TransientKey],
+		authtypes.NewModuleAddress(govtypes.ModuleName),
+		certApp.AccountKeeper,
+		certApp.BankKeeper,
+		certApp.StakingKeeper,
+		certApp.FeeMarketKeeper,
+		nil, // erc20Keeper (nil if module not used)
+		"",  // tracer
+		certApp.GetSubspace(evmtypes.ModuleName),
+	)
+
 	// Initialize crisis keeper
 	// certApp.CrisisKeeper = *crisiskeeper.NewKeeper(
 	// 	appCodec,
@@ -420,6 +507,9 @@ func NewCertApp(
 		slashing.NewAppModule(appCodec, certApp.SlashingKeeper, certApp.AccountKeeper, certApp.BankKeeper, certApp.StakingKeeper, nil, nil),
 		gov.NewAppModule(appCodec, &certApp.GovKeeper, certApp.AccountKeeper, certApp.BankKeeper, nil),
 		mint.NewAppModule(appCodec, certApp.MintKeeper, certApp.AccountKeeper, nil, nil),
+		evm.NewAppModule(certApp.EvmKeeper, certApp.AccountKeeper, certApp.GetSubspace(evmtypes.ModuleName)),
+		feemarket.NewAppModule(certApp.FeeMarketKeeper, certApp.GetSubspace(feemarkettypes.ModuleName)),
+		upgrade.NewAppModule(certApp.UpgradeKeeper, addressCodec),
 		// crisis.NewAppModule(appCodec, &certApp.CrisisKeeper, false),
 	)
 
@@ -437,6 +527,9 @@ func NewCertApp(
 		consensustypes.ModuleName,
 		genutiltypes.ModuleName,
 		attestationtypes.ModuleName,
+		evmtypes.ModuleName,
+		feemarkettypes.ModuleName,
+		upgradetypes.ModuleName,
 	)
 
 	// Set order for begin/end blockers
@@ -445,11 +538,16 @@ func NewCertApp(
 		slashingtypes.ModuleName,
 		stakingtypes.ModuleName,
 		attestationtypes.ModuleName,
+		feemarkettypes.ModuleName,
+		evmtypes.ModuleName,
 	)
 	certApp.ModuleManager.SetOrderEndBlockers(
 			govtypes.ModuleName,
 			stakingtypes.ModuleName,
 			attestationtypes.ModuleName,
+			evmtypes.ModuleName,
+			feemarkettypes.ModuleName,
+			upgradetypes.ModuleName,
 	)
 
 	// Register services (message handlers and query handlers)
@@ -464,6 +562,28 @@ func NewCertApp(
 	certApp.SetPreBlocker(certApp.PreBlocker)
 	certApp.SetBeginBlocker(certApp.BeginBlocker)
 	certApp.SetEndBlocker(certApp.EndBlocker)
+
+	// Set AnteHandler using Ethermint's logic (handles both Cosmos and EVM txs)
+	anteOptions := ante.HandlerOptions{
+		AccountKeeper:          certApp.AccountKeeper,
+		BankKeeper:             certApp.BankKeeper,
+		IBCKeeper:              certApp.IBCKeeper,
+		FeeMarketKeeper:        certApp.FeeMarketKeeper,
+		EvmKeeper:              certApp.EvmKeeper,
+		DistributionKeeper:     MockDistributionKeeper{},
+		StakingKeeper:          certApp.StakingKeeper,
+		SignModeHandler:        txConfig.SignModeHandler(),
+		SigGasConsumer:         authante.DefaultSigVerificationGasConsumer,
+		MaxTxGasWanted:         MaxGasPerBlock,
+		ExtensionOptionChecker: etherminttypes.HasDynamicFeeExtensionOption,
+		TxFeeChecker:           evmante.NewDynamicFeeChecker(certApp.EvmKeeper),
+	}
+
+	anteHandler, err := NewAnteHandler(anteOptions)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create ante handler: %v", err))
+	}
+	certApp.SetAnteHandler(anteHandler)
 
 	if loadLatest {
 			if err := certApp.LoadLatestVersion(); err != nil {
@@ -686,4 +806,13 @@ func (app *CertApp) AppCodec() codec.Codec {
 // InterfaceRegistry returns the app's interface registry
 func (app *CertApp) InterfaceRegistry() codectypes.InterfaceRegistry {
 	return app.interfaceRegistry
+}
+
+// GetSubspace returns a param subspace for a given module name.
+func (app *CertApp) GetSubspace(moduleName string) paramstypes.Subspace {
+	subspace, ok := app.ParamsKeeper.GetSubspace(moduleName)
+	if !ok {
+		panic(fmt.Sprintf("subspace not found: %s", moduleName))
+	}
+	return subspace
 }

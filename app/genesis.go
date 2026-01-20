@@ -29,6 +29,8 @@ import (
 	// paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	// consensustypes "github.com/cosmos/cosmos-sdk/x/consensus/types"
 	// attestationtypes "github.com/chaincertify/certd/x/attestation/types"
+	evmtypes "github.com/evmos/evmos/v20/x/evm/types"
+	feemarkettypes "github.com/evmos/evmos/v20/x/feemarket/types"
 )
 
 // GenesisState represents the entire genesis state for the CERT blockchain
@@ -45,6 +47,8 @@ func NewDefaultGenesisState(cdc codec.JSONCodec) GenesisState {
 	genesis[slashingtypes.ModuleName] = cdc.MustMarshalJSON(GetSlashingGenesisState(cdc))
 	genesis[govtypes.ModuleName] = cdc.MustMarshalJSON(GetGovGenesisState(cdc))
 	genesis[minttypes.ModuleName] = cdc.MustMarshalJSON(GetMintGenesisState(cdc))
+	genesis[evmtypes.ModuleName] = cdc.MustMarshalJSON(GetEvmGenesisState(cdc))
+	genesis[feemarkettypes.ModuleName] = cdc.MustMarshalJSON(GetFeeMarketGenesisState(cdc))
 	// genesis[crisistypes.ModuleName] = cdc.MustMarshalJSON(GetCrisisGenesisState(cdc))
 
 	// Add genesis accounts with Tokenomics v2.1 distribution
@@ -310,4 +314,20 @@ func GetCrisisGenesisState(cdc codec.JSONCodec) *crisistypes.GenesisState {
 	crisisGenState := crisistypes.DefaultGenesisState()
 	crisisGenState.ConstantFee = sdk.NewCoin(TokenDenom, math.NewInt(1_000_000_000)) // 1,000 CERT
 	return crisisGenState
+}
+
+// GetEvmGenesisState returns EVM genesis state with CERT params
+func GetEvmGenesisState(cdc codec.JSONCodec) *evmtypes.GenesisState {
+	evmGenState := evmtypes.DefaultGenesisState()
+	evmGenState.Params.EvmDenom = TokenDenom
+	return evmGenState
+}
+
+// GetFeeMarketGenesisState returns Fee Market genesis state with CERT params
+func GetFeeMarketGenesisState(cdc codec.JSONCodec) *feemarkettypes.GenesisState {
+	feeMarketGenState := feemarkettypes.DefaultGenesisState()
+	feeMarketGenState.Params.BaseFee = math.NewInt(1_000_000_000) // 1 Gwei
+	feeMarketGenState.Params.MinGasPrice = math.LegacyZeroDec()
+	feeMarketGenState.Params.MinGasMultiplier = math.LegacyNewDecWithPrec(5, 1) // 0.5
+	return feeMarketGenState
 }

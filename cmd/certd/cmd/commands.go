@@ -31,6 +31,8 @@ import (
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 
 	"github.com/chaincertify/certd/app"
+
+	ethermintserver "github.com/evmos/evmos/v20/server"
 )
 
 // Package-level variables for app creation
@@ -258,7 +260,12 @@ func initRootCmd(rootCmd *cobra.Command, moduleBasics module.BasicManager) {
 		snapshot.Cmd(newApp),
 	)
 
-	server.AddCommands(rootCmd, app.DefaultNodeHome, newApp, appExport, addModuleInitFlags)
+	ethermintserver.AddCommands(
+		rootCmd,
+		ethermintserver.NewDefaultStartOptions(newApp, app.DefaultNodeHome),
+		appExport,
+		addModuleInitFlags,
+	)
 
 	// Add genesis commands (add-genesis-account, gentx, collect-gentxs, validate-genesis)
 	rootCmd.AddCommand(genesisCommand(moduleBasics))

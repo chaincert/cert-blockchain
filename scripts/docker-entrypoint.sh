@@ -100,13 +100,11 @@ if [ ! -f "$HOME_DIR/config/genesis.json" ]; then
     echo "Step 2: Configuring app.toml..."
     sed -i 's/minimum-gas-prices = ""/minimum-gas-prices = "0.0001ucert"/' $HOME_DIR/config/app.toml
 
-    # Disable IAVL fast node to fix "version does not exist" errors on balance queries
-    # This is required for Cosmos SDK v0.50.x with IAVL v1.x
-    # Using awk for reliable config modification in Alpine
-    awk '{gsub(/iavl-disable-fastnode = false/, "iavl-disable-fastnode = true")}1' $HOME_DIR/config/app.toml > $HOME_DIR/config/app.toml.tmp && mv $HOME_DIR/config/app.toml.tmp $HOME_DIR/config/app.toml
-
-    # Verify the change was applied
-    echo "IAVL FastNode setting:"
+    # Disable IAVL fast node to avoid "version does not exist" errors on fresh chains
+    # The fastnode feature has issues with IAVL v1.x when starting from genesis
+    # Setting iavl-disable-fastnode = true disables fastnode (slightly slower queries but more stable)
+    echo "Disabling IAVL FastNode for stability..."
+    sed -i 's/iavl-disable-fastnode = false/iavl-disable-fastnode = true/' $HOME_DIR/config/app.toml
     grep "iavl-disable-fastnode" $HOME_DIR/config/app.toml
 
     # Set pruning to nothing to keep all state versions (required for REST API queries)
