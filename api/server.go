@@ -170,6 +170,25 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/social/verify", s.requireAuth(s.handleSocialVerify)).Methods("POST", "OPTIONS")
 	api.HandleFunc("/social/{address}", s.handleSocialStatus).Methods("GET")
 
+	// API Key Management endpoints
+	api.HandleFunc("/api-keys", s.requireAuth(s.handleCreateAPIKey)).Methods("POST", "OPTIONS")
+	api.HandleFunc("/api-keys", s.requireAuth(s.handleListAPIKeys)).Methods("GET")
+	api.HandleFunc("/api-keys/{keyId}", s.requireAuth(s.handleRevokeAPIKey)).Methods("DELETE", "OPTIONS")
+	api.HandleFunc("/api-keys/{keyId}/usage", s.requireAuth(s.handleGetAPIKeyUsage)).Methods("GET")
+	api.HandleFunc("/api-keys/tiers", s.handleGetAPITiers).Methods("GET")
+
+	// Sybil Resistance API (Trust Score Validation)
+	api.HandleFunc("/sybil/check/{address}", s.handleSybilCheck).Methods("GET")
+	api.HandleFunc("/sybil/batch", s.handleSybilBatchCheck).Methods("POST", "OPTIONS")
+	api.HandleFunc("/sybil/history/{address}", s.handleGetTrustScoreHistory).Methods("GET")
+
+	// DID:web Support (W3C Decentralized Identifiers)
+	api.HandleFunc("/.well-known/did.json", s.handleGetWellKnownDID).Methods("GET")
+	api.HandleFunc("/identity/{address}/did.json", s.handleGetDIDDocument).Methods("GET")
+	api.HandleFunc("/identity/{address}/presentation", s.handleGetDIDVerifiablePresentation).Methods("GET")
+	api.HandleFunc("/identity/{address}/did/export", s.handleExportDIDtoJSON).Methods("GET")
+	api.HandleFunc("/did/resolve", s.handleResolveDID).Methods("GET")
+
 	// Statistics
 	api.HandleFunc("/stats", s.handleGetStats).Methods("GET")
 
@@ -224,7 +243,7 @@ func (s *Server) setupMiddleware() {
 	c := cors.New(cors.Options{
 		AllowedOrigins:   s.config.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With", "X-API-Key"},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	})

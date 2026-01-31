@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/chaincertify/certd/api/database"
+	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +20,7 @@ var supportedPlatforms = map[string]bool{
 	"twitter":  true,
 	"linkedin": true,
 	"facebook": true,
+	"github":   true,
 }
 
 // Platform display names
@@ -26,6 +28,7 @@ var platformNames = map[string]string{
 	"twitter":  "X (Twitter)",
 	"linkedin": "LinkedIn",
 	"facebook": "Facebook",
+	"github":   "GitHub",
 }
 
 type socialGenerateRequest struct {
@@ -82,6 +85,12 @@ func (s *Server) handleSocialGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Database required for social verification
+	if s.db == nil {
+		s.respondJSON(w, http.StatusServiceUnavailable, socialGenerateResponse{Error: "database service unavailable"})
+		return
+	}
+
 	// Generate unique code
 	codeBytes := make([]byte, 8)
 	if _, err := rand.Read(codeBytes); err != nil {
@@ -90,10 +99,30 @@ func (s *Server) handleSocialGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	code := fmt.Sprintf("C3RT-%s", strings.ToUpper(hex.EncodeToString(codeBytes)))
 
+	// Ensure user profile exists (required by FK constraint)
+	ctx := r.Context()
+	profile, err := s.db.GetProfile(ctx, address)
+	if err != nil || profile == nil {
+		// Auto-create profile if missing
+		s.logger.Info("auto-creating profile for social verification", zap.String("address", address))
+		newProfile := &database.UserProfile{
+			Address:     address,
+			Name:        "Anonymous User",
+			Bio:         "",
+			AvatarURL:   "",
+			SocialLinks: make(map[string]string),
+		}
+		err := s.db.CreateProfile(ctx, newProfile)
+		if err != nil {
+			s.logger.Error("failed to auto-create profile", zap.Error(err))
+			s.respondJSON(w, http.StatusInternalServerError, socialGenerateResponse{Error: "failed to initialize user profile"})
+			return
+		}
+	}
+
 	// Store in database (expires in 24 hours)
 	expiresAt := time.Now().Add(24 * time.Hour)
-	ctx := r.Context()
-	_, err := s.db.CreateSocialVerification(ctx, address, platform, code, expiresAt)
+	_, err = s.db.CreateSocialVerification(ctx, address, platform, code, expiresAt)
 	if err != nil {
 		s.logger.Error("failed to create social verification", zap.Error(err))
 		s.respondJSON(w, http.StatusInternalServerError, socialGenerateResponse{Error: "failed to create verification"})
@@ -139,6 +168,12 @@ func (s *Server) handleSocialVerify(w http.ResponseWriter, r *http.Request) {
 	// Validate URL format for platform
 	if !isValidPlatformURL(platform, req.PostURL) {
 		s.respondJSON(w, http.StatusBadRequest, socialVerifyResponse{Error: "invalid URL for this platform"})
+		return
+	}
+
+	// Database required for verification
+	if s.db == nil {
+		s.respondJSON(w, http.StatusServiceUnavailable, socialVerifyResponse{Error: "database service unavailable"})
 		return
 	}
 
@@ -189,10 +224,16 @@ func (s *Server) handleSocialVerify(w http.ResponseWriter, r *http.Request) {
 // handleSocialStatus returns verified social accounts for an address
 // GET /api/v1/social/{address}
 func (s *Server) handleSocialStatus(w http.ResponseWriter, r *http.Request) {
-	vars := muxVars(r)
+	vars := mux.Vars(r)
 	address := strings.ToLower(vars["address"])
 	if address == "" {
 		s.respondJSON(w, http.StatusBadRequest, socialStatusResponse{})
+		return
+	}
+
+	// Database required
+	if s.db == nil {
+		s.respondJSON(w, http.StatusOK, socialStatusResponse{Accounts: []socialAccountResponse{}})
 		return
 	}
 
@@ -229,6 +270,9 @@ func isValidPlatformURL(platform, url string) bool {
 		return strings.Contains(url, "linkedin.com/")
 	case "facebook":
 		return strings.Contains(url, "facebook.com/")
+	case "github":
+		// GitHub Gist URLs: gist.github.com/{username}/{gist_id}
+		return strings.Contains(url, "gist.github.com/")
 	}
 	return false
 }
@@ -263,26 +307,5 @@ func fetchAndVerifyPost(url, code string) (bool, error) {
 	// Check if code is present in the page
 	bodyStr := string(body)
 	return strings.Contains(bodyStr, code), nil
-}
-
-// muxVars helper to get route variables
-func muxVars(r *http.Request) map[string]string {
-	// Import gorilla/mux Vars if using mux, or use chi/pat
-	// For now, simple path parsing
-	vars := make(map[string]string)
-	// Try to extract from mux if available
-	if v := r.Context().Value("vars"); v != nil {
-		if m, ok := v.(map[string]string); ok {
-			return m
-		}
-	}
-	// Fallback: parse path manually
-	path := r.URL.Path
-	// Expected: /api/v1/social/{address}
-	re := regexp.MustCompile(`/api/v1/social/([^/]+)$`)
-	if matches := re.FindStringSubmatch(path); len(matches) > 1 {
-		vars["address"] = matches[1]
-	}
-	return vars
 }
 
