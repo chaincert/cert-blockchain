@@ -1,6 +1,6 @@
 {
   "name": "@certblockchain/sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Official JavaScript SDK for CERT Blockchain - Encrypted Attestations and CertID",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
