@@ -233,6 +233,9 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/bridge/history/{address}", s.handleGetTransferHistory).Methods("GET")
 	api.HandleFunc("/bridge/stats", s.handleGetBridgeStats).Methods("GET")
 
+	// Enterprise Contact (Sales inquiries)
+	api.HandleFunc("/enterprise/contact", s.handleEnterpriseContact).Methods("POST", "OPTIONS")
+
 	// Discourse SSO (Community Forum Integration)
 	s.RegisterDiscourseRoutes(api)
 }

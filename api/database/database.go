@@ -483,3 +483,18 @@ func (db *DB) GetFaucetTransactions(ctx context.Context, address string, limit i
 	}
 	return txs, rows.Err()
 }
+
+// StoreEnterpriseContact stores an enterprise contact form submission
+func (db *DB) StoreEnterpriseContact(ctx context.Context, name, email, company, useCase, message string) error {
+	query := `
+		INSERT INTO enterprise_contacts (name, email, company, use_case, message, created_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+	`
+	_, err := db.conn.ExecContext(ctx, query, name, email, company, useCase, message)
+	if err != nil {
+		db.logger.Warn("Failed to store enterprise contact (table may not exist)", zap.Error(err))
+		// Return nil to not fail the request - contact is still logged
+		return nil
+	}
+	return nil
+}
