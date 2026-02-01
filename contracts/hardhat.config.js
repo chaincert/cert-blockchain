@@ -18,7 +18,9 @@ module.exports = {
       chainId: parseInt(process.env.CERT_CHAIN_ID || "4283207343"),
       accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
-        : [],
+        : {
+          mnemonic: "clarify luggage toddler behave squeeze report around reflect smart flight carry link",
+        },
       gasPrice: "auto",
     },
     // Testnet configuration

@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -10,10 +11,10 @@ import (
 
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/gogoproto/grpc"
-	"encoding/hex"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/proto"
+	protov2 "google.golang.org/protobuf/proto"
+	evmapi "github.com/evmos/evmos/v20/api/ethermint/evm/v1"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 
@@ -23,6 +24,8 @@ import (
 	"cosmossdk.io/x/upgrade"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+
+	"github.com/cosmos/cosmos-sdk/types/mempool"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -164,22 +167,9 @@ func MakeEncodingConfig() (codec.Codec, codectypes.InterfaceRegistry, client.TxC
 			AddressCodec:          addressCodec,
 			ValidatorAddressCodec: validatorAddressCodec,
 			CustomGetSigners: map[protoreflect.FullName]signing.GetSignersFunc{
-				"ethermint.evm.v1.MsgEthereumTx": func(msg proto.Message) ([][]byte, error) {
-					// Use reflection to avoid type assertion issues with Gogo proto vs Google proto compatibility
-					md := msg.ProtoReflect().Descriptor()
-					fromField := md.Fields().ByName("from")
-					if fromField != nil {
-						fromVal := msg.ProtoReflect().Get(fromField)
-						fromStr := fromVal.String()
-						if fromStr != "" {
-							sender, err := hex.DecodeString(fromStr)
-							if err == nil {
-								return [][]byte{sender}, nil
-							}
-							return [][]byte{[]byte(fromStr)}, nil
-						}
-					}
-					return nil, nil
+				"ethermint.evm.v1.MsgEthereumTx": func(msg protov2.Message) ([][]byte, error) {
+	// Use Evmos's GetSigners which recovers the sender address from the tx signature
+					return evmapi.GetSigners(msg)
 				},
 			},
 		},
@@ -190,6 +180,8 @@ func MakeEncodingConfig() (codec.Codec, codectypes.InterfaceRegistry, client.TxC
 
 	std.RegisterInterfaces(interfaceRegistry)
 	ModuleBasics.RegisterInterfaces(interfaceRegistry)
+	etherminttypes.RegisterInterfaces(interfaceRegistry)
+	
 	appCodec := codec.NewProtoCodec(interfaceRegistry)
 	txConfig := authtx.NewTxConfig(appCodec, authtx.DefaultSignModes)
 	return appCodec, interfaceRegistry, txConfig
@@ -270,22 +262,79 @@ func NewCertApp(
 			AddressCodec:          addressCodec,
 			ValidatorAddressCodec: validatorAddressCodec,
 			CustomGetSigners: map[protoreflect.FullName]signing.GetSignersFunc{
-				"ethermint.evm.v1.MsgEthereumTx": func(msg proto.Message) ([][]byte, error) {
-					// Use reflection to avoid type assertion issues with Gogo proto vs Google proto compatibility
+				(&evmapi.MsgEthereumTx{}).ProtoReflect().Descriptor().FullName(): func(msg protov2.Message) ([][]byte, error) {
+					// Robust handler for MsgEthereumTx
+					// 1. Try generic evmapi.GetSigners which recovers from signature
+					// 2. Fallback to "from" field if available (legacy/debug)
+					// 3. Log everything to stderr to debug issues
+
+					fmt.Fprintf(os.Stderr, "DEBUG: CustomGetSigners called for MsgEthereumTx\n")
+
+					// Defensive panic recovery
+
+
+	// Defensive panic recovery
+	defer func() {
+						if r := recover(); r != nil {
+							fmt.Fprintf(os.Stderr, "ERROR: CustomGetSigners panicked: %v\n", r)
+						}
+					}()
+
+					signers, err := evmapi.GetSigners(msg)
+					if err == nil && len(signers) > 0 {
+						// Check for empty bytes
+						valid := true
+						for _, s := range signers {
+							if len(s) == 0 {
+								valid = false
+								break
+							}
+						}
+						if valid {
+							fmt.Fprintf(os.Stderr, "DEBUG: evmapi.GetSigners returned %d valid signers\n", len(signers))
+							return signers, nil
+						}
+					}
+
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "DEBUG: evmapi.GetSigners returned error: %v\n", err)
+					} else {
+						fmt.Fprintf(os.Stderr, "DEBUG: evmapi.GetSigners returned 0 signers\n")
+					}
+
+					// Fallback: Try decoding 'from' field directly using reflection
+					fmt.Fprintf(os.Stderr, "DEBUG: Attempting fallback to 'from' field\n")
 					md := msg.ProtoReflect().Descriptor()
 					fromField := md.Fields().ByName("from")
 					if fromField != nil {
 						fromVal := msg.ProtoReflect().Get(fromField)
 						fromStr := fromVal.String()
+						fmt.Fprintf(os.Stderr, "DEBUG: Found 'from' field: %s\n", fromStr)
+						
 						if fromStr != "" {
-							sender, err := hex.DecodeString(fromStr)
-							if err == nil {
-								return [][]byte{sender}, nil
+							// Try hex decoding
+							fromBytes, err := hex.DecodeString(fromStr)
+							if err == nil && len(fromBytes) > 0 {
+								fmt.Fprintf(os.Stderr, "DEBUG: Successfully decoded 'from' field via hex\n")
+								return [][]byte{fromBytes}, nil
 							}
+							// Try 0x hex decoding
+							if len(fromStr) > 2 && fromStr[:2] == "0x" {
+								fromBytes, err = hex.DecodeString(fromStr[2:])
+								if err == nil && len(fromBytes) > 0 {
+									fmt.Fprintf(os.Stderr, "DEBUG: Successfully decoded 'from' field via 0x hex\n")
+									return [][]byte{fromBytes}, nil
+								}
+							}
+							// If generic string (e.g. valid bech32? unlikely for EVM msg)
+							fmt.Fprintf(os.Stderr, "DEBUG: Failed to hex decode 'from' field\n")
+							// Assuming it's already bytes stringified? 
 							return [][]byte{[]byte(fromStr)}, nil
 						}
 					}
-					return nil, nil
+					
+					fmt.Fprintf(os.Stderr, "ERROR: Failed to extract any signers from MsgEthereumTx\n")
+					return nil, nil // Return nil, nil which triggers "tx must have at least one signer"
 				},
 			},
 		},
@@ -298,12 +347,27 @@ func NewCertApp(
 	std.RegisterInterfaces(interfaceRegistry)
 	ModuleBasics.RegisterLegacyAminoCodec(legacyAmino)
 	ModuleBasics.RegisterInterfaces(interfaceRegistry)
+	etherminttypes.RegisterInterfaces(interfaceRegistry)
+	evmtypes.RegisterInterfaces(interfaceRegistry) // Register ExtensionOptionsEthereumTx
 
 	appCodec := codec.NewProtoCodec(interfaceRegistry)
 	txConfig := authtx.NewTxConfig(appCodec, authtx.DefaultSignModes)
 
 	// Create base app with options (including chain ID)
 	bApp := baseapp.NewBaseApp(AppName, logger, db, txConfig.TxDecoder(), baseAppOptions...)
+	
+	// Configure custom Mempool with EVM support
+	// Use PriorityMempool which allows setting a custom SignerExtractor.
+	// SenderNonceMempool was ignoring MsgEthereumTx signers.
+	signerExtractor := NewCertSignerExtractor()
+	mempoolConfig := mempool.PriorityNonceMempoolConfig[int64]{
+		TxPriority:      mempool.NewDefaultTxPriority(),
+		SignerExtractor: signerExtractor,
+		MaxTx:           5000,
+	}
+	nonceMempool := mempool.NewPriorityMempool(mempoolConfig)
+	bApp.SetMempool(nonceMempool)
+
 	bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetVersion("v1.0.0")
 	bApp.SetInterfaceRegistry(interfaceRegistry)
@@ -365,10 +429,12 @@ func NewCertApp(
 	bech32Codec := address.NewBech32Codec(AccountAddressPrefix)
 
 	// Initialize account keeper
+	// IMPORTANT: Use etherminttypes.ProtoAccount instead of authtypes.ProtoBaseAccount
+	// This creates EthAccount instances that support SetCodeHash for EVM contracts
 	certApp.AccountKeeper = authkeeper.NewAccountKeeper(
 		appCodec,
 		runtime.NewKVStoreService(keys[authtypes.StoreKey]),
-		authtypes.ProtoBaseAccount,
+		etherminttypes.ProtoAccount,
 		maccPerms,
 		bech32Codec,
 		AccountAddressPrefix,
@@ -590,7 +656,7 @@ func NewCertApp(
 		IBCKeeper:              certApp.IBCKeeper,
 		FeeMarketKeeper:        certApp.FeeMarketKeeper,
 		EvmKeeper:              certApp.EvmKeeper,
-		DistributionKeeper:     MockDistributionKeeper{},
+		DistributionKeeper:     MockDistributionKeeper{}, // TODO: Use actual keeper if available, but mock satisfies interface
 		StakingKeeper:          certApp.StakingKeeper,
 		SignModeHandler:        txConfig.SignModeHandler(),
 		SigGasConsumer:         authante.DefaultSigVerificationGasConsumer,
@@ -603,27 +669,40 @@ func NewCertApp(
 	if err != nil {
 		panic(fmt.Sprintf("failed to create ante handler: %v", err))
 	}
-	certApp.SetAnteHandler(anteHandler)
+
+	// Wrap with Debug logic to inspect Msgs
+	debugAnteHandler := func(ctx sdk.Context, tx sdk.Tx, simulate bool) (newCtx sdk.Context, err error) {
+		for i, msg := range tx.GetMsgs() {
+			if pMsg, ok := msg.(protov2.Message); ok {
+				fmt.Fprintf(os.Stderr, "DEBUG: Ante Msg[%d] FullName: %s\n", i, pMsg.ProtoReflect().Descriptor().FullName())
+			} else {
+				fmt.Fprintf(os.Stderr, "DEBUG: Ante Msg[%d] is not protov2.Message: %T\n", i, msg)
+			}
+		}
+		return anteHandler(ctx, tx, simulate)
+	}
+
+	certApp.SetAnteHandler(debugAnteHandler)
 
 	if loadLatest {
-			if err := certApp.LoadLatestVersion(); err != nil {
-				panic(err)
-			}
+		if err := certApp.LoadLatestVersion(); err != nil {
+			panic(err)
+		}
 
-			// Defensive fix for existing chains that were started before slashing
-			// hooks were properly wired into staking. In that scenario, the
-			// slashing module never created ValidatorSigningInfo records for
-			// validators (including the genesis validator), which causes
-			// FinalizeBlock to fail with:
-			//   "no validator signing info found".
-			//
-			// To make the node forward-compatible without requiring operators to
-			// wipe chain state, we ensure that every current validator has a
-			// signing info entry. This migration is idempotent and runs on every
-			// startup after the latest version is loaded.
-			if err := certApp.ensureValidatorSigningInfos(); err != nil {
-				panic(fmt.Sprintf("failed to ensure validator signing infos: %v", err))
-			}
+		// Defensive fix for existing chains that were started before slashing
+		// hooks were properly wired into staking. In that scenario, the
+		// slashing module never created ValidatorSigningInfo records for
+		// validators (including the genesis validator), which causes
+		// FinalizeBlock to fail with:
+		//   "no validator signing info found".
+		//
+		// To make the node forward-compatible without requiring operators to
+		// wipe chain state, we ensure that every current validator has a
+		// signing info entry. This migration is idempotent and runs on every
+		// startup after the latest version is loaded.
+		if err := certApp.ensureValidatorSigningInfos(); err != nil {
+			panic(fmt.Sprintf("failed to ensure validator signing infos: %v", err))
+		}
 	}
 
 	return certApp
@@ -636,6 +715,57 @@ func BlockedAddresses() map[string]bool {
 		blockedAddrs[authtypes.NewModuleAddress(acc).String()] = true
 	}
 	return blockedAddrs
+}
+
+// CertSignerExtractor implements mempool.SignerExtractionAdapter to handle both Cosmos and EVM transactions
+type CertSignerExtractor struct{
+	defaultExtractor mempool.SignerExtractionAdapter
+}
+
+func NewCertSignerExtractor() CertSignerExtractor {
+	return CertSignerExtractor{
+		defaultExtractor: mempool.NewDefaultSignerExtractionAdapter(),
+	}
+}
+
+func (cse CertSignerExtractor) GetSigners(tx sdk.Tx) ([]mempool.SignerData, error) {
+	// DEBUG LOGGING
+	fmt.Fprintf(os.Stderr, "DEBUG: CertSignerExtractor.GetSigners called with %d msgs\n", len(tx.GetMsgs()))
+
+	for i, msg := range tx.GetMsgs() {
+		fmt.Fprintf(os.Stderr, "DEBUG: Msg[%d] Type: %T\n", i, msg)
+		if ethMsg, ok := msg.(*evmtypes.MsgEthereumTx); ok {
+			fmt.Fprintf(os.Stderr, "DEBUG: Matched evmtypes.MsgEthereumTx\n")
+			
+			// Get sender from the message (recovers from signature)
+			from := ethMsg.GetFrom()
+			fmt.Fprintf(os.Stderr, "DEBUG: MsgEthereumTx From: %s\n", from.String())
+			if from.Empty() {
+				fmt.Fprintf(os.Stderr, "DEBUG: MsgEthereumTx From is empty, returning nil\n")
+				return nil, nil
+			}
+			
+			// Get nonce from transaction data
+			txData, err := evmtypes.UnpackTxData(ethMsg.Data)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "DEBUG: MsgEthereumTx UnpackTxData failed: %v\n", err)
+				return nil, err
+			}
+			nonce := txData.GetNonce()
+			fmt.Fprintf(os.Stderr, "DEBUG: MsgEthereumTx nonce: %d\n", nonce)
+
+			// Return SignerData
+			return []mempool.SignerData{{
+				Signer:   from,
+				Sequence: nonce,
+			}}, nil
+		}
+	}
+	
+	// Fallback to default for standard Cosmos Transactions
+	// Note: Default extractor handles getting Sequence from AuthInfo
+	fmt.Fprintf(os.Stderr, "DEBUG: Delegating to DefaultSignerExtractionAdapter\n")
+	return cse.defaultExtractor.GetSigners(tx)
 }
 
 // LoadHeight loads a particular height from the store
@@ -836,3 +966,4 @@ func (app *CertApp) GetSubspace(moduleName string) paramstypes.Subspace {
 	}
 	return subspace
 }
+

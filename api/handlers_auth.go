@@ -78,7 +78,7 @@ func (s *Server) handleAuthChallenge(w http.ResponseWriter, r *http.Request) {
 type authVerifyRequest struct {
 	Address   string `json:"address"`
 	Nonce     string `json:"nonce"`
-	Signature string `json:"signature"`
+	Signature json.RawMessage `json:"signature"`
 }
 
 type authVerifyResponse struct {
@@ -92,14 +92,24 @@ type authVerifyResponse struct {
 func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	var req authVerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.logger.Warn("auth verify failed: invalid json", zap.Error(err))
 		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "Invalid request body"})
 		return
 	}
 
 	req.Address = strings.TrimSpace(req.Address)
+	req.Address = strings.TrimSpace(req.Address)
 	req.Nonce = strings.TrimSpace(req.Nonce)
-	req.Signature = strings.TrimSpace(req.Signature)
-	if req.Address == "" || req.Nonce == "" || req.Signature == "" {
+	
+	// Check if signature is present
+	if len(req.Signature) == 0 {
+		s.logger.Warn("auth verify failed: missing signature")
+		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "signature is required"})
+		return
+	}
+	// Address and Nonce check
+	if req.Address == "" || req.Nonce == "" {
+		s.logger.Warn("auth verify failed: missing fields", zap.Any("req", req))
 		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "address, nonce, and signature are required"})
 		return
 	}
@@ -140,6 +150,7 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 		// Decode bech32 to get raw address bytes
 		_, addrBytes, err := bech32.DecodeAndConvert(req.Address)
 		if err != nil {
+			s.logger.Warn("auth verify failed: invalid bech32", zap.Error(err), zap.String("addr", req.Address))
 			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid bech32 address"})
 			return
 		}
@@ -149,6 +160,7 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		evmAddress = fmt.Sprintf("0x%x", addrBytes)
 	} else if !(strings.HasPrefix(req.Address, "0x") || strings.HasPrefix(req.Address, "0X")) {
+		s.logger.Warn("auth verify failed: invalid address format", zap.String("addr", req.Address))
 		s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "address must be 0x... or cert1... format"})
 		return
 	}
@@ -167,11 +179,16 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	var sigBytes []byte
 	var pubKeyBytes []byte
 
-	if err := json.Unmarshal([]byte(req.Signature), &keplrSig); err == nil && keplrSig.Signature != "" {
+	// Parse Signature: it can be a JSON string (EVM/standard) or a JSON object (Keplr)
+	var sigString string
+	
+	// First, try to see if it's a JSON object (Keplr struct)
+	if err := json.Unmarshal(req.Signature, &keplrSig); err == nil && keplrSig.Signature != "" {
 		// Keplr JSON format with pubkey
-		s.logger.Debug("parsed Keplr signature", zap.String("pubkey_type", keplrSig.PubKey.Type))
+		s.logger.Debug("parsed Keplr signature object", zap.String("pubkey_type", keplrSig.PubKey.Type))
 		sigBytes, err = base64.StdEncoding.DecodeString(keplrSig.Signature)
 		if err != nil {
+			s.logger.Warn("auth verify failed: invalid signature encoding (keplr)", zap.Error(err))
 			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid signature encoding"})
 			return
 		}
@@ -179,10 +196,17 @@ func (s *Server) handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 			pubKeyBytes, _ = base64.StdEncoding.DecodeString(keplrSig.PubKey.Value)
 		}
 	} else {
+		// Try to unmarshal as a string (EVM case)
+		if err := json.Unmarshal(req.Signature, &sigString); err != nil {
+			// If it's not a valid JSON string, maybe it's the raw string? (Unlikely if Decode succeeded, but safe fallback)
+			sigString = string(req.Signature)
+		}
+		sigString = strings.TrimSpace(sigString)
+		
 		// Standard signature format
-		sigBytes, err = decodeAnySignature(req.Signature)
+		sigBytes, err = decodeAnySignature(sigString)
 		if err != nil {
-			s.logger.Warn("signature decode failed", zap.Error(err), zap.String("sig_prefix", req.Signature[:min(20, len(req.Signature))]))
+			s.logger.Warn("signature decode failed", zap.Error(err), zap.String("sig_prefix", sigString[:min(20, len(sigString))]))
 			s.respondJSON(w, http.StatusBadRequest, authVerifyResponse{OK: false, Error: "invalid signature"})
 			return
 		}

@@ -1,375 +1,134 @@
-# @certblockchain/sdk
+# CertID Sybil Resistance SDK
 
-Official JavaScript/TypeScript SDK for the CERT Blockchain ecosystem. Build privacy-preserving applications with encrypted attestations, decentralized identity (CertID), and verifiable credentials.
-
-[![npm version](https://img.shields.io/npm/v/@certblockchain/sdk)](https://www.npmjs.com/package/@certblockchain/sdk)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Tests](https://img.shields.io/badge/tests-98%20passing-brightgreen)](https://github.com/chaincertify/cert-blockchain)
-
-## Features
-> [!IMPORTANT]
-> **Chain ID Notice**: The correct Chain ID is **`cert-testnet-1`**. Do not use `951753` unless you are specifically interacting with the EVM JSON-RPC directly.
-
-- 🔐 **Encrypted Attestations** - AES-256-GCM encryption with ECIES key wrapping
-
-- 🆔 **CertID Integration** - Decentralized identity management
-- 📦 **IPFS Storage** - Decentralized storage for encrypted data
-- ⛓️ **Dual Chain Support** - Works with both Cosmos and EVM chains
-- 🔑 **Wallet Integration** - Compatible with Keplr, MetaMask, and other wallets
-- 📝 **TypeScript** - Full type safety and IntelliSense support
-- ✅ **Production Ready** - 98 passing tests, thoroughly tested
+JavaScript SDK for CertID's Sybil Resistance API. Validate user authenticity and filter bots from your Web3 applications.
 
 ## Installation
 
 ```bash
-npm install @certblockchain/sdk ethers
+npm install @certid/sybil-sdk
+# or
+yarn add @certid/sybil-sdk
 ```
 
 ## Quick Start
 
-### Initialize the Client
+```javascript
+const CertIDSybil = require('@certid/sybil-sdk');
 
-```typescript
-import { CertClient } from '@certblockchain/sdk';
+const client = new CertIDSybil('YOUR_API_KEY');
 
-const client = new CertClient({
-  rpcUrl: 'https://rpc.c3rt.org',
-  apiUrl: 'https://api.c3rt.org/api/v1',
-  ipfsUrl: 'https://ipfs.c3rt.org',
-});
+// Check a single address
+const result = await client.check('cert1abc...');
+console.log(`Trust Score: ${result.trust_score}`);
+console.log(`Is Human: ${result.is_likely_human}`);
 ```
 
-### Create an Encrypted Attestation
+## Features
 
-```typescript
-import { ethers } from 'ethers';
-
-// Connect your wallet
-const provider = new ethers.BrowserProvider(window.ethereum);
-const signer = await provider.getSigner();
-
-// Create attestation data
-const attestationData = {
-  patientId: 'P12345',
-  recordType: 'LAB_RESULT',
-  data: {
-    testName: 'Complete Blood Count',
-    results: { wbc: 7.5, rbc: 4.8 }
-  },
-  timestamp: Date.now()
-};
-
-// Define recipients (up to 50)
-const recipients = [
-  {
-    address: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-    publicKey: '0x04...' // Recipient's public key
-  }
-];
-
-// Create encrypted attestation
-const result = await client.attestation.create({
-  schemaUID: '0x1234...', // Your schema UID
-  data: attestationData,
-  recipients: recipients,
-  signer: signer
-});
-
-console.log('Attestation UID:', result.uid);
-console.log('IPFS CID:', result.ipfsCID);
+### Single Address Check
+```javascript
+const result = await client.check('cert1abc...');
+// Returns: { address, trust_score, is_likely_human, factors, checked_at }
 ```
 
-### Retrieve and Decrypt an Attestation
-
-```typescript
-// Retrieve encrypted attestation
-const attestation = await client.attestation.get('0xabc123...'); // UID
-
-// Decrypt with your private key
-const decrypted = await client.attestation.decrypt(
-  attestation,
-  yourPrivateKey
-);
-
-console.log('Decrypted data:', decrypted.data);
+### Batch Check
+```javascript
+const results = await client.batchCheck(['cert1abc...', 'cert1xyz...'], 60);
+// Returns: { results: [...], summary: { total, likely_real, suspicious } }
 ```
 
-### CertID - Decentralized Identity
-
-```typescript
-// Register a CertID profile
-await client.certid.register({
-  username: 'alice',
-  displayName: 'Alice Smith',
-  bio: 'Healthcare professional',
-  avatar: 'ipfs://Qm...',
-  signer: signer
-});
-
-// Resolve a CertID
-const profile = await client.certid.resolve('alice');
-console.log(profile.displayName); // "Alice Smith"
-
-// Get profile by address
-const profileByAddress = await client.certid.getByAddress(
-  '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
-);
+### Filter Real Users
+```javascript
+const addresses = ['cert1abc...', 'cert1xyz...', 'cert1def...'];
+const realUsers = await client.filterReal(addresses, 50);
+// Returns only addresses with trust_score >= 50
 ```
 
-### CertID - Direct EVM Contract Interaction
-
-For direct interaction with the CertID smart contract on the CERT EVM chain:
-
-```typescript
-import { ethers } from 'ethers';
-import { CertID, CONTRACT_ADDRESSES, CERT_ID_ABI } from '@certblockchain/sdk';
-
-// Connect to CERT EVM chain
-const provider = new ethers.JsonRpcProvider('https://evm.c3rt.org');
-const signer = new ethers.Wallet(privateKey, provider);
-
-// Initialize CertID with signer - automatically uses deployed contract address
-const certId = new CertID('https://api.c3rt.org', signer);
-
-// Or specify a custom contract address
-const certIdCustom = new CertID(
-  'https://api.c3rt.org',
-  signer,
-  '0xYourCustomContractAddress'
-);
-
-// Get full identity with badges and trust score
-const identity = await certId.getFullIdentity('0x742d35Cc...');
-console.log('Handle:', identity.handle);
-console.log('Trust Score:', identity.trustScore);
-console.log('Badges:', identity.badges);
-console.log('Is KYC Verified:', identity.isKYC);
-
-// Check for specific badge
-const hasKYC = await certId.hasBadge('0x742d35Cc...', 'KYC_L1');
-
-// Get trust score
-const trustScore = await certId.getTrustScore('0x742d35Cc...');
-
-// Resolve handle to address
-const address = await certId.resolveHandle('alice.cert');
-
-// Get detailed profile for display (includes badge icons)
-const profile = await certId.getDetailedProfile('0x742d35Cc...');
-console.log('Display Name:', profile.displayName);
-console.log('Badges:', profile.badges.map(b => `${b.icon} ${b.name}`).join(', '));
+### Filter Suspicious Accounts
+```javascript
+const suspicious = await client.filterSuspicious(addresses, 30);
+// Returns only addresses with trust_score < 30
 ```
 
-**Available Badge Types:**
-- `KYC_L1` - Basic KYC verification
-- `KYC_L2` - Enhanced KYC verification  
-- `ACADEMIC_ISSUER` - Academic institution
-- `VERIFIED_CREATOR` - Verified content creator
-- `GOV_AGENCY` - Government agency
-- `LEGAL_ENTITY` - Registered legal entity
-- `ISO_9001_CERTIFIED` - ISO 9001 certified organization
-
-## Core Concepts
-
-### Encrypted Attestations
-
-CERT uses a 5-step encryption process per the whitepaper:
-
-1. **AES Key Generation** - Generate a 256-bit symmetric key
-2. **Data Encryption** - Encrypt attestation data with AES-256-GCM
-3. **ECIES Key Wrapping** - Wrap the AES key for each recipient
-4. **IPFS Upload** - Store encrypted data on IPFS
-5. **On-Chain Anchoring** - Record the IPFS CID and metadata on-chain
-
-Only authorized recipients can decrypt the data using their private keys.
-
-### Schemas
-
-Define the structure of your attestations:
-
-```typescript
-import { DEFAULT_SCHEMAS } from '@certblockchain/sdk';
-
-// Use built-in schemas
-const schemaUID = DEFAULT_SCHEMAS.IDENTITY_VERIFICATION;
-
-// Or register a custom schema
-const customSchema = await client.attestation.registerSchema({
-  schema: 'string name, uint256 age, string email',
-  resolver: '0x0000000000000000000000000000000000000000',
-  revocable: true,
-  signer: signer
-});
+### Get Detailed Factors
+```javascript
+const factors = await client.getDetailedFactors('cert1abc...');
+// Returns: { kyc_verified, social_verifications, onchain_activity, account_age_months, staked_amount, attestations_received }
 ```
 
-### Utility Functions
+## Trust Score Factors
 
-```typescript
-import {
-  formatCERT,
-  parseCERT,
-  validateAddress,
-  evmToCosmosAddress,
-  hashData,
-  generateUID
-} from '@certblockchain/sdk';
+| Factor | Max Points | Description |
+|--------|------------|-------------|
+| KYC Verification | 30 | Completed identity verification |
+| Social Accounts | 40 | 10 pts per verified platform |
+| On-Chain Activity | 20 | 5 pts per transaction |
+| Account Age | 10 | 1 pt per month |
+| Staked Amount | 20 | 0.01 pts per CERT staked |
+| Attestations | 20 | 2 pts per attestation received |
 
-// Format token amounts
-formatCERT(1500000n); // "1.5 CERT"
-parseCERT(1.5); // 1500000n
+**Total Maximum Score: 100**
 
-// Validate addresses
-validateAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e'); // true
-validateAddress('cert1abc...'); // true
+## Use Cases
 
-// Convert EVM to Cosmos address
-evmToCosmosAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e');
-// Returns: "cert1..."
+### Airdrop Protection
+```javascript
+const eligible = await client.filterReal(airdropAddresses, 60);
+// Only airdrop to addresses with 60+ trust score
+```
 
-// Hash data
-hashData('sensitive data'); // "0xabc123..."
+### Governance Gating
+```javascript
+const result = await client.check(voterAddress);
+if (result.trust_score >= 70 && result.factors.kyc_verified) {
+  allowVote();
+}
+```
+
+### NFT Minting
+```javascript
+const result = await client.check(minterAddress);
+if (result.is_likely_human) {
+  allowMint(1); // Limit mints for verified humans
+}
 ```
 
 ## API Reference
 
-### CertClient
-
-Main client for interacting with CERT Blockchain.
-
-**Constructor Options:**
-- `rpcUrl` - RPC endpoint (default: https://rpc.c3rt.org)
-- `apiUrl` - API endpoint (default: https://api.c3rt.org/api/v1)
-- `ipfsUrl` - IPFS endpoint (optional)
-- `chainId` - Chain ID (default: 951753)
-
-**Methods:**
-- `getProvider()` - Get ethers JSON-RPC provider
-- `connectSigner(signer)` - Connect a wallet signer
-- `createSigner(privateKey)` - Create signer from private key
-
-### EncryptedAttestation
-
-Manage encrypted attestations.
-
-**Methods:**
-- `create(request)` - Create new encrypted attestation
-- `get(uid)` - Retrieve attestation by UID
-- `decrypt(attestation, privateKey)` - Decrypt attestation data
-- `verify(uid)` - Verify attestation integrity
-- `revoke(uid, signer)` - Revoke an attestation
-
-### CertID
-
-Decentralized identity management.
-
-**Methods:**
-- `register(profile, signer)` - Register new CertID
-- `resolve(username)` - Get profile by username
-- `getByAddress(address)` - Get profile by wallet address
-- `update(profile, signer)` - Update profile
-- `addCredential(credential, signer)` - Add verifiable credential
-
-### Encryption
-
-Low-level encryption utilities.
-
-**Methods:**
-- `generateKeyPair()` - Generate ECIES key pair
-- `generateSymmetricKey()` - Generate AES-256 key
-- `encryptData(data, key)` - Encrypt with AES-256-GCM
-- `decryptData(encrypted, key)` - Decrypt data
-- `wrapKeyForRecipient(key, publicKey)` - Wrap key with ECIES
-- `unwrapKey(wrapped, privateKey)` - Unwrap key
-
-## Constants
-
-```typescript
-import {
-  CERT_CHAIN_ID,        // 'cert-mainnet-1'
-  CERT_EVM_CHAIN_ID,    // 951753
-  CERT_RPC_URL,         // 'https://rpc.c3rt.org'
-  CERT_API_URL,         // 'https://api.c3rt.org/api/v1'
-  CERT_DENOM,           // 'ucert'
-  CERT_DECIMALS,        // 6
-  MAX_VALIDATORS,       // 80
-  BLOCK_TIME_MS,        // 2000 (2 seconds)
-} from '@certblockchain/sdk';
+### Constructor
+```javascript
+new CertIDSybil(apiKey, options)
 ```
+- `apiKey` (string): Your CertID API key
+- `options.baseUrl` (string): Custom API URL (default: https://api.c3rt.org/api/v1)
+- `options.timeout` (number): Request timeout in ms (default: 10000)
 
-## Examples
+### Methods
 
-See the [examples directory](./examples) for complete working examples:
+| Method | Parameters | Returns |
+|--------|------------|---------|
+| `check(address)` | address: string | SybilCheckResponse |
+| `batchCheck(addresses, threshold?)` | addresses: string[], threshold?: number | BatchCheckResponse |
+| `filterReal(addresses, minScore?)` | addresses: string[], minScore?: number | string[] |
+| `filterSuspicious(addresses, maxScore?)` | addresses: string[], maxScore?: number | string[] |
+| `getDetailedFactors(address)` | address: string | TrustFactors |
 
-- [Healthcare Records](./examples/healthcare.ts)
-- [Academic Credentials](./examples/credentials.ts)
-- [Business Documents](./examples/documents.ts)
-- [Identity Verification](./examples/identity.ts)
+## Pricing
 
-## Testing
+| Tier | Monthly | Requests/Day | Support |
+|------|---------|--------------|---------|
+| Free | $0 | 100 | Community |
+| Developer | $49 | 10,000 | Email |
+| Enterprise | $499 | 1,000,000 | Priority |
 
-The SDK includes comprehensive tests:
-
-```bash
-npm test              # Run all tests
-npm run test:watch    # Watch mode
-```
-
-**Test Coverage:**
-- ✅ 98 tests passing
-- ✅ E2E encryption flow
-- ✅ Attestation creation and retrieval
-- ✅ CertID operations
-- ✅ Utility functions
-- ✅ IPFS integration
-
-## TypeScript Support
-
-Full TypeScript support with exported types:
-
-```typescript
-import type {
-  AttestationData,
-  EncryptedAttestationData,
-  CertIDProfile,
-  ClientConfig,
-  Recipient,
-  Schema,
-} from '@certblockchain/sdk';
-```
-
-## Browser Support
-
-Works in modern browsers with Web3 wallet extensions:
-
-```html
-<script type="module">
-  import { CertClient } from 'https://cdn.jsdelivr.net/npm/@certblockchain/sdk/+esm';
-  
-  const client = new CertClient();
-  // Use the SDK
-</script>
-```
-
-## Requirements
-
-- Node.js >= 18.0.0
-- ethers ^6.0.0
-
-## License
-
-MIT © CERT Blockchain Team
+Get your API key at [c3rt.org/api-dashboard](https://c3rt.org/api-dashboard)
 
 ## Links
 
-- [Website](https://c3rt.org)
 - [Documentation](https://c3rt.org/docs)
-- [GitHub](https://github.com/chaincertify/cert-blockchain)
-- [Whitepaper](https://c3rt.org/whitepaper)
-- [Discord](https://discord.gg/cert)
+- [API Dashboard](https://c3rt.org/api-dashboard)
+- [Discord](https://discord.gg/certid)
 
-## Support
+## License
 
-- 📧 Email: dev@c3rt.org
-- 💬 Discord: https://discord.gg/cert
-- 🐛 Issues: https://github.com/chaincertify/cert-blockchain/issues
-
+MIT

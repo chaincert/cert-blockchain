@@ -23,7 +23,7 @@
 // Network configuration
 export const CERT_CHAIN_ID = 'cert-mainnet-1';
 export const CERT_TESTNET_CHAIN_ID = 'cert-testnet-1';
-export const CERT_EVM_CHAIN_ID = 951753;
+export const CERT_EVM_CHAIN_ID = 4283207343;
 
 // Default endpoints
 export const CERT_RPC_URL = 'https://rpc.c3rt.org';

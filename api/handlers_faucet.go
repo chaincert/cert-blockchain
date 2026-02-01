@@ -135,7 +135,7 @@ func (s *Server) executeFaucetTransfer(toAddress string) (string, error) {
 	}
 
 	faucetSeqMutex.Lock()
-	defer faucetSeqMutex.Unlock()
+	// defer faucetSeqMutex.Unlock() // Removed to avoid double unlock on recursive retry
 
 	// Initialize sequence on first use
 	if !faucetInitialized {
@@ -150,40 +150,77 @@ func (s *Server) executeFaucetTransfer(toAddress string) (string, error) {
 	// If `/tmp/signed.json` is not an actual `Tx` JSON, `certd tx broadcast` fails with
 	// errors like: `unknown field "codespace" in tx.Tx`.
 	shellScript := fmt.Sprintf(`
-set -eu
+set -u
 
-certd tx bank send validator %s %sucert \
-  --keyring-backend test --home /root/.certd --chain-id cert-testnet-1 \
-  --gas 200000 --fees 10000ucert --generate-only > /tmp/unsigned.json
+# Clean up previous run
+rm -f /tmp/unsigned.json /tmp/signed.json /tmp/signing_error.log
 
-# certd tx sign sometimes emits the signed tx JSON on stderr (SDK/CLI quirk).
-# Capture its combined output, then extract the first full-line JSON object.
+# Generate
+certd tx bank send %s %s %sucert \
+  --keyring-backend %s --home %s --chain-id %s \
+  --gas %s --fees %s --generate-only > /tmp/unsigned.json 2>/dev/null
+
+if [ ! -s /tmp/unsigned.json ]; then
+  echo "Failed to generate unsigned tx"
+  exit 1
+fi
+
+# Sign
+# Capture stdout to signed.json, stderr to temp file.
+# Note: certd sometimes prints JSON to stderr.
 certd tx sign /tmp/unsigned.json \
-  --from validator --keyring-backend test --home /root/.certd \
-  --chain-id cert-testnet-1 --offline --account-number %d --sequence %d \
-  --output json 2>&1 | sed -n 's/^\({.*}\)$/\1/p' | head -n 1 > /tmp/signed.json
+  --from %s --keyring-backend %s --home %s \
+  --chain-id %s --offline --account-number %d --sequence %d \
+  --output json --log_no_color > /tmp/signed.json 2> /tmp/signing_tmp
 
-test -s /tmp/signed.json
+# Check where the JSON landed
+if [ ! -s /tmp/signed.json ]; then
+  if [ -s /tmp/signing_tmp ] && grep -q "{\"body\"" /tmp/signing_tmp; then
+    mv /tmp/signing_tmp /tmp/signed.json
+  else
+    echo "Signing failed. Output:"
+    cat /tmp/signing_tmp
+    exit 1
+  fi
+fi
 
+# Broadcast
 certd tx broadcast /tmp/signed.json \
-  --node tcp://localhost:26657 --broadcast-mode sync --output json
-`, bech32Addr, faucetAmount, faucetAccountNum, faucetSequence)
+  --node %s --broadcast-mode sync --output json
+`, s.config.TxFrom, bech32Addr, faucetAmount,
+		s.config.TxKeyringBackend, s.config.TxHome, s.config.ChainID,
+		s.config.TxGas, s.config.TxFees,
+		s.config.TxFrom, s.config.TxKeyringBackend, s.config.TxHome,
+		s.config.ChainID,
+		faucetAccountNum, faucetSequence,
+		s.config.TxNode)
 
-	// Execute the script inside the certd container
-	cmd := exec.Command("docker", "exec", "certd", "sh", "-c", shellScript)
+	// Execute the script locally (node runs natively, not in Docker)
+	cmd := exec.Command("sh", "-c", shellScript)
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		errMsg := string(output)
-		// Check for sequence mismatch and retry
-		if strings.Contains(errMsg, "account sequence mismatch") {
-			if newSeq := extractSequenceFromError(errMsg); newSeq >= 0 {
-				s.logger.Info("Sequence mismatch, retrying", zap.Int64("new_seq", newSeq))
-				faucetSequence = uint64(newSeq)
-				faucetSeqMutex.Unlock()
-				return s.executeFaucetTransfer(toAddress)
-			}
+	outStr := string(output)
+
+	// Check for sequence mismatch and retry (regardless of exit code/error)
+	// certd tx broadcast sometimes exits with 0 even on CheckTx failure (sequence mismatch)
+	if strings.Contains(outStr, "account sequence mismatch") {
+		if newSeq := extractSequenceFromError(outStr); newSeq >= 0 {
+			s.logger.Info("Sequence mismatch, retrying", zap.Int64("new_seq", newSeq))
+			faucetSequence = uint64(newSeq)
+			faucetSeqMutex.Unlock() // Unlock before recursion
+			return s.executeFaucetTransfer(toAddress)
 		}
-		return "", fmt.Errorf("faucet tx failed: %v: %s", err, errMsg)
+	}
+
+	if err != nil {
+		s.logger.Error("Faucet script failed", zap.String("output", outStr))
+		faucetSeqMutex.Unlock() // Unlock before return
+		return "", fmt.Errorf("faucet tx failed: %v: %s", err, outStr)
+	}
+
+	// Check for tx errors in the response
+	if err := s.checkBroadcastForErrors(outStr); err != nil {
+		faucetSeqMutex.Unlock() // Unlock before return
+		return "", err
 	}
 
 	// Parse output for txhash
@@ -200,6 +237,7 @@ certd tx broadcast /tmp/signed.json \
 
 	// Increment sequence for next transaction
 	faucetSequence++
+	faucetSeqMutex.Unlock() // Unlock before success return
 
 	return txHash, nil
 }
@@ -281,11 +319,11 @@ func extractFirstJSONObject[T any](s string) (T, bool) {
 
 // initializeFaucetSequence sets up initial sequence (starts at 0 for new chains)
 func (s *Server) initializeFaucetSequence() {
-	// Get validator address for logging
-	addrCmd := exec.Command("docker", "exec", "certd",
-		"certd", "keys", "show", "validator",
-		"--keyring-backend", "test",
-		"--home", "/root/.certd",
+	// Get validator address for logging (run locally, not via docker)
+	// Uses config values for flexibility
+	addrCmd := exec.Command("certd", "keys", "show", s.config.TxFrom,
+		"--keyring-backend", s.config.TxKeyringBackend,
+		"--home", s.config.TxHome,
 		"-a",
 	)
 	addrOutput, _ := addrCmd.CombinedOutput()
@@ -300,7 +338,8 @@ func (s *Server) initializeFaucetSequence() {
 // extractSequenceFromError parses sequence from "account sequence mismatch" error
 func extractSequenceFromError(output string) int64 {
 	// Error format: "account sequence mismatch, expected X, got Y"
-	re := regexp.MustCompile(`expected (\d+)`)
+	// Regex matches "expected " followed by digits
+	re := regexp.MustCompile(`expected\s+(\d+)`)
 	matches := re.FindStringSubmatch(output)
 	if len(matches) >= 2 {
 		var seq int64
