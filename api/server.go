@@ -182,6 +182,11 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/sybil/batch", s.handleSybilBatchCheck).Methods("POST", "OPTIONS")
 	api.HandleFunc("/sybil/history/{address}", s.handleGetTrustScoreHistory).Methods("GET")
 
+	// Cross-Chain Sybil API (Layer3 Integration)
+	api.HandleFunc("/sybil/crosschain/{address}", s.handleCrossChainSybilCheck).Methods("GET")
+	api.HandleFunc("/sybil/verify-action", s.handleVerifyChainAction).Methods("POST", "OPTIONS")
+	api.HandleFunc("/sybil/verify-actions", s.handleBatchVerifyActions).Methods("POST", "OPTIONS")
+
 	// DID:web Support (W3C Decentralized Identifiers)
 	api.HandleFunc("/.well-known/did.json", s.handleGetWellKnownDID).Methods("GET")
 	api.HandleFunc("/identity/{address}/did.json", s.handleGetDIDDocument).Methods("GET")
