@@ -1,0 +1,40 @@
+{
+    "name": "@certblockchain/sybil-sdk",
+    "version": "1.0.0",
+    "description": "CertID Sybil Resistance SDK - Trust scores and bot detection for Web3",
+    "main": "index.js",
+    "module": "index.mjs",
+    "types": "index.d.ts",
+    "files": [
+        "index.js",
+        "index.mjs",
+        "index.d.ts"
+    ],
+    "scripts": {
+        "test": "node test.js"
+    },
+    "keywords": [
+        "sybil",
+        "trust-score",
+        "bot-detection",
+        "airdrop",
+        "web3",
+        "blockchain",
+        "certid",
+        "identity",
+        "anti-fraud"
+    ],
+    "author": "Cert Blockchain LLC",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/chaincertify/cert-blockchain"
+    },
+    "homepage": "https://c3rt.org/developers/sybil-api",
+    "bugs": {
+        "url": "https://github.com/chaincertify/cert-blockchain/issues"
+    },
+    "engines": {
+        "node": ">=14.0.0"
+    }
+}
