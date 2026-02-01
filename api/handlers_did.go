@@ -48,17 +48,49 @@ type WellKnownDIDConfig struct {
 	LinkedDIDs []string `json:"linked_dids"`
 }
 
-// handleGetWellKnownDID serves the .well-known/did.json configuration
+// handleGetWellKnownDID serves the .well-known/did.json - the root DID document for did:web:c3rt.org
 func (s *Server) handleGetWellKnownDID(w http.ResponseWriter, r *http.Request) {
-	config := WellKnownDIDConfig{
-		Context: "https://identity.foundation/.well-known/did-configuration/v1",
-		LinkedDIDs: []string{
-			"did:web:c3rt.org",
+	// For did:web:c3rt.org, we return the root DID document
+	didID := "did:web:c3rt.org"
+
+	doc := DIDDocument{
+		Context: []string{
+			"https://www.w3.org/ns/did/v1",
+			"https://w3id.org/security/suites/secp256k1-2019/v1",
+		},
+		ID:         didID,
+		Controller: didID,
+	}
+
+	// Add verification method for the root DID
+	verificationMethodID := didID + "#key-1"
+	doc.VerificationMethod = []VerificationMethod{
+		{
+			ID:         verificationMethodID,
+			Type:       "JsonWebKey2020",
+			Controller: didID,
+		},
+	}
+
+	// Add authentication
+	doc.Authentication = []interface{}{verificationMethodID}
+
+	// Add CertID service endpoint
+	doc.Service = []ServiceEndpoint{
+		{
+			ID:              didID + "#certid-api",
+			Type:            "CertIDService",
+			ServiceEndpoint: "https://api.c3rt.org/api/v1",
+		},
+		{
+			ID:              didID + "#identity-hub",
+			Type:            "IdentityHub",
+			ServiceEndpoint: "https://c3rt.org/identity",
 		},
 	}
 
 	w.Header().Set("Content-Type", "application/did+json")
-	s.respondJSON(w, http.StatusOK, config)
+	s.respondJSON(w, http.StatusOK, doc)
 }
 
 // handleGetDIDDocument returns the DID document for a specific address
