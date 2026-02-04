@@ -47,7 +47,8 @@ func (k Keeper) CreateEncryptedAttestation(
 	}
 
 	// Generate attestation UID using encrypted data hash as part of data
-	uid := types.GenerateUID(attester, schemaUID, ctx.BlockTime(), []byte(encryptedDataHash))
+	nonce := k.GetAttestationCount(ctx)
+	uid := types.GenerateUID(attester, schemaUID, ctx.BlockTime(), []byte(encryptedDataHash), nonce)
 
 	// Build base attestation
 	baseAttestation := types.Attestation{

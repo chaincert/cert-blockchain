@@ -17,14 +17,14 @@ func TestGenerateUID(t *testing.T) {
 	timestamp := time.Now()
 	data := []byte(`{"test":"data"}`)
 
-	uid1 := types.GenerateUID(attester, schemaUID, timestamp, data)
-	uid2 := types.GenerateUID(attester, schemaUID, timestamp, data)
+	uid1 := types.GenerateUID(attester, schemaUID, timestamp, data, 0)
+	uid2 := types.GenerateUID(attester, schemaUID, timestamp, data, 0)
 
 	// Same inputs should produce same UID
 	require.Equal(t, uid1, uid2)
 
 	// Different inputs should produce different UIDs
-	uid3 := types.GenerateUID(attester, schemaUID, timestamp.Add(time.Second), data)
+	uid3 := types.GenerateUID(attester, schemaUID, timestamp.Add(time.Second), data, 0)
 	require.NotEqual(t, uid1, uid3)
 
 	// UID should be a valid hex string (64 chars for SHA-256)

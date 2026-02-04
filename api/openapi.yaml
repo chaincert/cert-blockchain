@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: CERT Blockchain API
+  description: API for the CERT Blockchain ecosystem, providing access to identity, attestations, and blockchain data.
+  version: 1.0.0
+servers:
+  - url: https://api.c3rt.org/api/v1
+    description: Production Server
+  - url: http://localhost:3000/api/v1
+    description: Local Development Server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+
+  /auth/challenge:
+    get:
+      summary: Get authentication challenge
+      description: Returns a nonce to sign for EIP-191 authentication
+      parameters:
+        - name: address
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Challenge generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nonce:
+                    type: string
+                    description: Random nonce to sign
+
+  /auth/verify:
+    post:
+      summary: Verify authentication challenge
+      description: Verifies signed nonce and returns JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - address
+                - signature
+              properties:
+                address:
+                  type: string
+                signature:
+                  type: string
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token
+                  expires_in:
+                    type: integer
+
+  /encrypted-attestations:
+    post:
+      summary: Create encrypted attestation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEncryptedAttestationRequest'
+      responses:
+        '201':
+          description: Attestation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEncryptedAttestationResponse'
+
+  /encrypted-attestations/{uid}:
+    get:
+      summary: Get encrypted attestation metadata
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attestation metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                  schema_uid:
+                    type: string
+                  attester:
+                    type: string
+                  recipients:
+                    type: array
+                    items:
+                      type: string
+
+  /profile/{address}:
+    get:
+      summary: Get user profile
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /profile:
+    post:
+      summary: Update user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /profile/verify-social:
+    post:
+      summary: Verify social media account
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySocialRequest'
+      responses:
+        '200':
+          description: Verification submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+                  platform:
+                    type: string
+                  handle:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateEncryptedAttestationRequest:
+      type: object
+      required:
+        - schema_uid
+        - ipfs_cid
+        - recipients
+      properties:
+        schema_uid:
+          type: string
+        ipfs_cid:
+          type: string
+        encrypted_hash:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+        encrypted_keys:
+          type: object
+          additionalProperties:
+            type: string
+        revocable:
+          type: boolean
+        expiration_time:
+          type: integer
+
+    CreateEncryptedAttestationResponse:
+      type: object
+      properties:
+        uid:
+          type: string
+        tx_hash:
+          type: string
+        timestamp:
+          type: integer
+
+    UserProfile:
+      type: object
+      properties:
+        address:
+          type: string
+        certid_uid:
+          type: string
+        name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+        social_links:
+          type: object
+          additionalProperties:
+            type: string
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/Credential'
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+
+    Credential:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        attestation_uid:
+          type: string
+        issuer:
+          type: string
+        issued_at:
+          type: integer
+        verified:
+          type: boolean
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        address:
+          type: string
+          description: Optional if authenticated via JWT
+        name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+        social_links:
+          type: object
+          additionalProperties:
+            type: string
+
+    VerifySocialRequest:
+      type: object
+      required:
+        - platform
+        - handle
+        - proof
+      properties:
+        platform:
+          type: string
+          enum: [twitter, github, linkedin, discord]
+        handle:
+          type: string
+        proof:
+          type: string

@@ -143,7 +143,8 @@ contract EAS is IEAS {
             request.data.recipient,
             msg.sender,
             block.timestamp,
-            request.data.data
+            request.data.data,
+            _attestationCount
         );
 
         _attestations[uid] = Attestation({
@@ -194,9 +195,10 @@ contract EAS is IEAS {
         address recipient,
         address attester,
         uint256 time,
-        bytes memory data
+        bytes memory data,
+        uint64 nonce
     ) private pure returns (bytes32) {
-        return keccak256(abi.encodePacked(schema, recipient, attester, time, data));
+        return keccak256(abi.encodePacked(schema, recipient, attester, time, data, nonce));
     }
 }
 

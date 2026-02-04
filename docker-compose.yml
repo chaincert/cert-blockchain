@@ -39,7 +39,7 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: cert
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-certpass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-c3rt_pROd_sEcReT_992834}
       POSTGRES_DB: certid
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -68,11 +68,12 @@ services:
       # Allow the API container to run `docker exec certd ...` (used by faucet + dashboard queries)
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgres://cert:${POSTGRES_PASSWORD:-certpass}@postgres:5432/certid?sslmode=disable
+      - DATABASE_URL=postgres://cert:${POSTGRES_PASSWORD:-c3rt_pROd_sEcReT_992834}@postgres:5432/certid?sslmode=disable
       - CHAIN_RPC_URL=http://certd:26657
       - EVM_RPC_URL=http://certd:8545
       - IPFS_GATEWAY=${IPFS_GATEWAY:-https://ipfs.c3rt.org}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:-v3ry_s3cr3t_jwt_k3y_7734_d0_n0t_sh4r3}
+      - ALLOW_UNAUTH_PROFILE_WRITE=0
       - TESTNET_STAKING_APY_PERCENT=${TESTNET_STAKING_APY_PERCENT:-10}
       - API_HOST=0.0.0.0
       - API_PORT=3000

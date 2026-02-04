@@ -245,12 +245,29 @@ func (s *Server) handleVerifySocial(w http.ResponseWriter, r *http.Request) {
 		zap.String("handle", req.Handle),
 	)
 
-	// TODO: Verify proof against platform APIs.
-	// For now, store the submitted proof as a placeholder and mark as verified.
+	// Verify proof using shared logic from handlers_social.go
+	if !isValidPlatformURL(req.Platform, req.Proof) {
+		s.respondError(w, http.StatusBadRequest, "Invalid proof URL for this platform (Note: Discord not supported via web link)")
+		return
+	}
+
+	// The post must contain the user's address to verify ownership
+	found, err := fetchAndVerifyPost(req.Proof, address)
+	if err != nil {
+		s.logger.Warn("Failed to fetch proof", zap.String("url", req.Proof), zap.Error(err))
+		s.respondError(w, http.StatusBadRequest, "Could not fetch proof URL. Ensure post is public.")
+		return
+	}
+
+	if !found {
+		s.respondError(w, http.StatusBadRequest, "Address not found in proof post. Please include your Cert address in the content.")
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	now := time.Now()
-	_ = s.db.AddSocialVerification(ctx, &database.SocialVerification{
+	err = s.db.AddSocialVerification(ctx, &database.SocialVerification{
 		UserAddress: address,
 		Platform:    req.Platform,
 		Handle:      req.Handle,
@@ -258,6 +275,11 @@ func (s *Server) handleVerifySocial(w http.ResponseWriter, r *http.Request) {
 		Verified:    true,
 		VerifiedAt:  &now,
 	})
+	if err != nil {
+		s.logger.Error("Failed to save verification", zap.Error(err))
+		s.respondError(w, http.StatusInternalServerError, "Failed to save verification")
+		return
+	}
 
 	s.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"verified": true,

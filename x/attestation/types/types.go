@@ -159,10 +159,11 @@ func (s *Schema) ProtoMessage()  {}
 func (*Schema) XXX_MessageName() string { return "cert.attestation.v1.Schema" }
 
 // GenerateUID generates a unique identifier for an attestation
-func GenerateUID(attester sdk.AccAddress, schemaUID string, timestamp time.Time, data []byte) string {
+func GenerateUID(attester sdk.AccAddress, schemaUID string, timestamp time.Time, data []byte, nonce uint64) string {
 	combined := append(attester.Bytes(), []byte(schemaUID)...)
 	combined = append(combined, []byte(timestamp.String())...)
 	combined = append(combined, data...)
+	combined = append(combined, Uint64ToBytes(nonce)...)
 	hash := sha256.Sum256(combined)
 	return hex.EncodeToString(hash[:])
 }

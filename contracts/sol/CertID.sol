@@ -68,23 +68,23 @@ contract CertID is Ownable, ReentrancyGuard {
 
     /**
      * @notice Register a new CertID profile
-     * @param _handle Unique handle (e.g., "alice.cert")
-     * @param _metadataURI IPFS URI for extended metadata
-     * @param _entityType Type of entity (Individual, Institution, etc.)
+     * @param handle Unique handle (e.g., "alice.cert")
+     * @param metadataURI IPFS URI for extended metadata
+     * @param entityType Type of entity (Individual, Institution, etc.)
      */
     function registerProfile(
-        string memory _handle,
-        string memory _metadataURI,
-        EntityType _entityType
+        string memory handle,
+        string memory metadataURI,
+        EntityType entityType
     ) external nonReentrant {
         require(!_profiles[msg.sender].isActive, "CertID: Profile already exists");
-        require(bytes(_handle).length > 0, "CertID: Handle cannot be empty");
-        require(_handleToAddress[_handle] == address(0), "CertID: Handle already taken");
+        require(bytes(handle).length > 0, "CertID: Handle cannot be empty");
+        require(_handleToAddress[handle] == address(0), "CertID: Handle already taken");
 
         _profiles[msg.sender] = Profile({
-            handle: _handle,
-            metadataURI: _metadataURI,
-            entityType: _entityType,
+            handle: handle,
+            metadataURI: metadataURI,
+            entityType: entityType,
             trustScore: 0,
             isVerified: false,
             isActive: true,
@@ -92,16 +92,16 @@ contract CertID is Ownable, ReentrancyGuard {
             updatedAt: block.timestamp
         });
 
-        _handleToAddress[_handle] = msg.sender;
-        emit ProfileCreated(msg.sender, _handle);
+        _handleToAddress[handle] = msg.sender;
+        emit ProfileCreated(msg.sender, handle);
     }
 
     /**
      * @notice Update profile metadata
-     * @param _metadataURI New IPFS URI for metadata
+     * @param metadataURI New IPFS URI for metadata
      */
-    function updateMetadata(string memory _metadataURI) external profileExists(msg.sender) {
-        _profiles[msg.sender].metadataURI = _metadataURI;
+    function updateMetadata(string memory metadataURI) external profileExists(msg.sender) {
+        _profiles[msg.sender].metadataURI = metadataURI;
         _profiles[msg.sender].updatedAt = block.timestamp;
         emit ProfileUpdated(msg.sender, _profiles[msg.sender].handle);
     }
@@ -110,87 +110,87 @@ contract CertID is Ownable, ReentrancyGuard {
 
     /**
      * @notice Award a verification badge to a user (SBT - non-transferable)
-     * @param _user Address to receive the badge
-     * @param _badgeName Human-readable badge name
+     * @param user Address to receive the badge
+     * @param badgeName Human-readable badge name
      */
-    function awardBadge(address _user, string memory _badgeName) external onlyAuthorized profileExists(_user) {
-        bytes32 badgeId = keccak256(abi.encodePacked(_badgeName));
-        require(!_badges[_user][badgeId], "CertID: Badge already awarded");
+    function awardBadge(address user, string memory badgeName) external onlyAuthorized profileExists(user) {
+        bytes32 badgeId = keccak256(abi.encodePacked(badgeName));
+        require(!_badges[user][badgeId], "CertID: Badge already awarded");
         
-        _badges[_user][badgeId] = true;
-        emit BadgeAwarded(_user, badgeId, _badgeName);
+        _badges[user][badgeId] = true;
+        emit BadgeAwarded(user, badgeId, badgeName);
     }
 
     /**
      * @notice Revoke a badge from a user
-     * @param _user Address to revoke badge from
-     * @param _badgeName Badge name to revoke
+     * @param user Address to revoke badge from
+     * @param badgeName Badge name to revoke
      */
-    function revokeBadge(address _user, string memory _badgeName) external onlyAuthorized {
-        bytes32 badgeId = keccak256(abi.encodePacked(_badgeName));
-        require(_badges[_user][badgeId], "CertID: Badge not found");
+    function revokeBadge(address user, string memory badgeName) external onlyAuthorized {
+        bytes32 badgeId = keccak256(abi.encodePacked(badgeName));
+        require(_badges[user][badgeId], "CertID: Badge not found");
         
-        _badges[_user][badgeId] = false;
-        emit BadgeRevoked(_user, badgeId);
+        _badges[user][badgeId] = false;
+        emit BadgeRevoked(user, badgeId);
     }
 
     // ============ Trust Score Management ============
 
     /**
      * @notice Update a user's trust score
-     * @param _user Address to update
-     * @param _score New trust score (0-100)
+     * @param user Address to update
+     * @param score New trust score (0-100)
      */
-    function updateTrustScore(address _user, uint256 _score) external onlyAuthorized profileExists(_user) {
-        require(_score <= 100, "CertID: Score must be <= 100");
-        uint256 oldScore = _profiles[_user].trustScore;
-        _profiles[_user].trustScore = _score;
-        _profiles[_user].updatedAt = block.timestamp;
-        emit TrustScoreUpdated(_user, oldScore, _score);
+    function updateTrustScore(address user, uint256 score) external onlyAuthorized profileExists(user) {
+        require(score <= 100, "CertID: Score must be <= 100");
+        uint256 oldScore = _profiles[user].trustScore;
+        _profiles[user].trustScore = score;
+        _profiles[user].updatedAt = block.timestamp;
+        emit TrustScoreUpdated(user, oldScore, score);
     }
 
     /**
      * @notice Increment trust score (called by Chain Certify on successful attestations)
-     * @param _user Address to increment
-     * @param _amount Amount to increment
+     * @param user Address to increment
+     * @param amount Amount to increment
      */
-    function incrementTrustScore(address _user, uint256 _amount) external onlyAuthorized profileExists(_user) {
-        uint256 oldScore = _profiles[_user].trustScore;
-        uint256 newScore = oldScore + _amount;
+    function incrementTrustScore(address user, uint256 amount) external onlyAuthorized profileExists(user) {
+        uint256 oldScore = _profiles[user].trustScore;
+        uint256 newScore = oldScore + amount;
         if (newScore > 100) newScore = 100;
-        _profiles[_user].trustScore = newScore;
-        _profiles[_user].updatedAt = block.timestamp;
-        emit TrustScoreUpdated(_user, oldScore, newScore);
+        _profiles[user].trustScore = newScore;
+        _profiles[user].updatedAt = block.timestamp;
+        emit TrustScoreUpdated(user, oldScore, newScore);
     }
 
     // ============ Verification Status ============
 
     /**
      * @notice Set verification status for a profile
-     * @param _user Address to verify/unverify
-     * @param _verified Verification status
+     * @param user Address to verify/unverify
+     * @param verified Verification status
      */
-    function setVerificationStatus(address _user, bool _verified) external onlyAuthorized profileExists(_user) {
-        _profiles[_user].isVerified = _verified;
-        _profiles[_user].updatedAt = block.timestamp;
-        emit VerificationStatusChanged(_user, _verified);
+    function setVerificationStatus(address user, bool verified) external onlyAuthorized profileExists(user) {
+        _profiles[user].isVerified = verified;
+        _profiles[user].updatedAt = block.timestamp;
+        emit VerificationStatusChanged(user, verified);
     }
 
     // ============ Oracle Management ============
 
-    function authorizeOracle(address _oracle) external onlyOwner {
-        authorizedOracles[_oracle] = true;
-        emit OracleAuthorized(_oracle);
+    function authorizeOracle(address oracle) external onlyOwner {
+        authorizedOracles[oracle] = true;
+        emit OracleAuthorized(oracle);
     }
 
-    function revokeOracle(address _oracle) external onlyOwner {
-        authorizedOracles[_oracle] = false;
-        emit OracleRevoked(_oracle);
+    function revokeOracle(address oracle) external onlyOwner {
+        authorizedOracles[oracle] = false;
+        emit OracleRevoked(oracle);
     }
 
     // ============ View Functions ============
 
-    function getProfile(address _user) external view returns (
+    function getProfile(address user) external view returns (
         string memory handle,
         string memory metadataURI,
         bool isVerified,
@@ -198,32 +198,32 @@ contract CertID is Ownable, ReentrancyGuard {
         EntityType entityType,
         bool isActive
     ) {
-        Profile storage p = _profiles[_user];
+        Profile storage p = _profiles[user];
         return (p.handle, p.metadataURI, p.isVerified, p.trustScore, p.entityType, p.isActive);
     }
 
-    function hasBadge(address _user, string memory _badgeName) external view returns (bool) {
-        return _badges[_user][keccak256(abi.encodePacked(_badgeName))];
+    function hasBadge(address user, string memory badgeName) external view returns (bool) {
+        return _badges[user][keccak256(abi.encodePacked(badgeName))];
     }
 
-    function hasBadgeById(address _user, bytes32 _badgeId) external view returns (bool) {
-        return _badges[_user][_badgeId];
+    function hasBadgeById(address user, bytes32 badgeId) external view returns (bool) {
+        return _badges[user][badgeId];
     }
 
-    function getHandle(address _user) external view returns (string memory) {
-        return _profiles[_user].handle;
+    function getHandle(address user) external view returns (string memory) {
+        return _profiles[user].handle;
     }
 
-    function resolveHandle(string memory _handle) external view returns (address) {
-        return _handleToAddress[_handle];
+    function resolveHandle(string memory handle) external view returns (address) {
+        return _handleToAddress[handle];
     }
 
-    function isProfileActive(address _user) external view returns (bool) {
-        return _profiles[_user].isActive;
+    function isProfileActive(address user) external view returns (bool) {
+        return _profiles[user].isActive;
     }
 
-    function getTrustScore(address _user) external view returns (uint256) {
-        return _profiles[_user].trustScore;
+    function getTrustScore(address user) external view returns (uint256) {
+        return _profiles[user].trustScore;
     }
 }
 

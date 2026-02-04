@@ -125,7 +125,8 @@ func (k Keeper) CreateAttestation(
 	}
 
 	// Generate attestation UID
-	uid := types.GenerateUID(attester, schemaUID, ctx.BlockTime(), data)
+	nonce := k.GetAttestationCount(ctx)
+	uid := types.GenerateUID(attester, schemaUID, ctx.BlockTime(), data, nonce)
 
 	// Create attestation
 	attestation := types.Attestation{
