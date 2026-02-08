@@ -17,6 +17,10 @@ import (
 	stakingcli "github.com/cosmos/cosmos-sdk/x/staking/client/cli"
 
 	"github.com/chaincertify/certd/app"
+	attestationmodule "github.com/chaincertify/certd/x/attestation"
+	attestationcli "github.com/chaincertify/certd/x/attestation/client/cli"
+	certidmodule "github.com/chaincertify/certd/x/certid"
+	certidcli "github.com/chaincertify/certd/x/certid/client/cli"
 )
 
 // stakingModuleBasicCLI overrides the SDK staking module's CLI command builders.
@@ -164,9 +168,37 @@ func patchAppModuleBasicsForCLI() {
 			app.ModuleBasics[i] = bankModuleBasicCLI{}
 		case gov.AppModuleBasic, app.GovModuleBasicGenesis:
 			app.ModuleBasics[i] = govModuleBasicCLI{}
+		case attestationmodule.AppModuleBasic:
+			app.ModuleBasics[i] = attestationModuleBasicCLI{}
+		case certidmodule.AppModuleBasic:
+			app.ModuleBasics[i] = certidModuleBasicCLI{}
 		}
 	}
 
 	// Defensive: ensure we didn't accidentally break the type.
 	_ = module.BasicManager(app.ModuleBasics)
+}
+
+type attestationModuleBasicCLI struct {
+	attestationmodule.AppModuleBasic
+}
+
+func (attestationModuleBasicCLI) GetTxCmd() *cobra.Command {
+	return attestationcli.GetTxCmd()
+}
+
+func (attestationModuleBasicCLI) GetQueryCmd() *cobra.Command {
+	return attestationcli.GetQueryCmd()
+}
+
+type certidModuleBasicCLI struct {
+	certidmodule.AppModuleBasic
+}
+
+func (certidModuleBasicCLI) GetTxCmd() *cobra.Command {
+	return certidcli.GetTxCmd()
+}
+
+func (certidModuleBasicCLI) GetQueryCmd() *cobra.Command {
+	return certidcli.GetQueryCmd()
 }

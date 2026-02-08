@@ -84,6 +84,9 @@ import (
 	attestationmodule "github.com/chaincertify/certd/x/attestation"
 	attestationkeeper "github.com/chaincertify/certd/x/attestation/keeper"
 	attestationtypes "github.com/chaincertify/certd/x/attestation/types"
+	certidmodule "github.com/chaincertify/certd/x/certid"
+	certidkeeper "github.com/chaincertify/certd/x/certid/keeper"
+	certidtypes "github.com/chaincertify/certd/x/certid/types"
 
 	// Evmos imports
 	"github.com/evmos/evmos/v20/app/ante"
@@ -123,6 +126,7 @@ var (
 		consensus.AppModuleBasic{},
 		// Custom CERT modules
 		attestationmodule.AppModuleBasic{},
+		certidmodule.AppModuleBasic{},
 		// Ethermint modules
 		evm.AppModuleBasic{},
 		feemarket.AppModuleBasic{},
@@ -219,6 +223,7 @@ type CertApp struct {
 
 	// CERT Custom Module Keepers
 	AttestationKeeper attestationkeeper.Keeper
+	CertIDKeeper      certidkeeper.Keeper
 
 	// New module keepers
 	SlashingKeeper slashingkeeper.Keeper
@@ -389,6 +394,7 @@ func NewCertApp(
 		evmtypes.StoreKey,
 		feemarkettypes.StoreKey,
 		upgradetypes.StoreKey,
+		certidtypes.StoreKey,
 		// crisistypes.StoreKey, // Disabled - crisis module not in use
 	)
 	tkeys := storetypes.NewTransientStoreKeys(paramstypes.TStoreKey, evmtypes.TransientKey)
@@ -482,6 +488,16 @@ func NewCertApp(
 		nil, // memKey - not used
 		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 	)
+
+	// Initialize CertID keeper
+	certApp.CertIDKeeper = certidkeeper.NewKeeper(
+		appCodec,
+		keys[certidtypes.StoreKey],
+		certApp.AccountKeeper,
+		certApp.BankKeeper,
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
+	certApp.CertIDKeeper.SetAttestationKeeper(&certApp.AttestationKeeper)
 
 		// Initialize slashing keeper
 		certApp.SlashingKeeper = slashingkeeper.NewKeeper(
@@ -596,6 +612,7 @@ func NewCertApp(
 		evm.NewAppModule(certApp.EvmKeeper, certApp.AccountKeeper, certApp.GetSubspace(evmtypes.ModuleName)),
 		feemarket.NewAppModule(certApp.FeeMarketKeeper, certApp.GetSubspace(feemarkettypes.ModuleName)),
 		upgrade.NewAppModule(certApp.UpgradeKeeper, addressCodec),
+		certidmodule.NewAppModule(certApp.CertIDKeeper),
 		// crisis.NewAppModule(appCodec, &certApp.CrisisKeeper, false),
 	)
 
@@ -616,6 +633,7 @@ func NewCertApp(
 		evmtypes.ModuleName,
 		feemarkettypes.ModuleName,
 		upgradetypes.ModuleName,
+		certidtypes.ModuleName,
 	)
 
 	// Set order for begin/end blockers
@@ -941,6 +959,10 @@ func (app *CertApp) RegisterGRPCServer(grpcServer grpc.Server) {
 	// We bypass the Configurator by registering directly on the gRPC server here.
 	attestationtypes.RegisterQueryServer(grpcServer, attestationkeeper.NewQueryServerImpl(app.AttestationKeeper))
 	attestationtypes.RegisterMsgServer(grpcServer, attestationkeeper.NewMsgServerImpl(app.AttestationKeeper))
+
+	// Register certid module gRPC services directly
+	// Note: These are now registered via module.RegisterServices() in module.go
+
 }
 
 // TxConfig returns the app's TxConfig

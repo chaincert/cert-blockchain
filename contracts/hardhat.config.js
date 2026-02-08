@@ -26,10 +26,13 @@ module.exports = {
     // Testnet configuration
     certTestnet: {
       url: process.env.CERT_TESTNET_RPC_URL || "http://localhost:8545",
-      chainId: 11612,
+      chainId: 4283207343,
       accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
-        : [],
+        : {
+          mnemonic: "clarify luggage toddler behave squeeze report around reflect smart flight carry link",
+        },
+      gasPrice: "auto",
     },
     // Hardhat local for testing
     hardhat: {

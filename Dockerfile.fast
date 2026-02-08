@@ -1,0 +1,16 @@
+FROM alpine:3.18
+
+WORKDIR /root
+
+# Install dependencies needed for running the binary (libc compatibility for Go binaries built with CGO)
+# Using gcompat for glibc compatibility on Alpine
+RUN apk add --no-cache ca-certificates gcompat
+
+COPY certd /usr/bin/certd
+
+# Initialize home directory
+RUN mkdir -p /root/.certd
+
+EXPOSE 26656 26657 1317 9090 8545 8546
+
+CMD ["certd", "start"]

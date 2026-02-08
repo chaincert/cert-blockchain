@@ -5,7 +5,7 @@
 FROM golang:1.22-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache make git gcc musl-dev
+RUN apk add --no-cache make git gcc musl-dev linux-headers
 
 WORKDIR /app
 
@@ -18,21 +18,25 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the API server
-RUN CGO_ENABLED=0 GOOS=linux go build -o /cert-api ./cmd/api
+# Build the API server (CGO required for go-ethereum crypto)
+RUN CGO_ENABLED=1 GOOS=linux go build -o /cert-api ./cmd/api
+
+# Build certd binary for faucet CLI commands
+RUN CGO_ENABLED=1 GOOS=linux go build -o /certd ./cmd/certd
 
 # Final stage
 FROM alpine:3.19
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata docker-cli
+# Install runtime dependencies (libc6-compat for CGO binaries built with musl)
+RUN apk add --no-cache ca-certificates tzdata docker-cli bash libc6-compat
 
 # Create non-root user
 RUN addgroup -g 1000 cert && \
     adduser -u 1000 -G cert -s /bin/sh -D cert
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder /cert-api /usr/local/bin/cert-api
+COPY --from=builder /certd /usr/local/bin/certd
 
 # Use non-root user
 USER cert

@@ -1,0 +1,129 @@
+syntax = "proto3";
+package cert.certid.v1;
+
+import "gogoproto/gogo.proto";
+import "cert/certid/v1/certid.proto";
+
+option go_package = "github.com/chaincertify/certd/x/certid/types";
+
+service Msg {
+  rpc CreateProfile(MsgCreateProfile) returns (MsgCreateProfileResponse);
+  rpc UpdateProfile(MsgUpdateProfile) returns (MsgUpdateProfileResponse);
+  rpc AddCredential(MsgAddCredential) returns (MsgAddCredentialResponse);
+  rpc RemoveCredential(MsgRemoveCredential) returns (MsgRemoveCredentialResponse);
+  rpc VerifySocial(MsgVerifySocial) returns (MsgVerifySocialResponse);
+  rpc RequestVerification(MsgRequestVerification) returns (MsgRequestVerificationResponse);
+  rpc AwardBadge(MsgAwardBadge) returns (MsgAwardBadgeResponse);
+  rpc RevokeBadge(MsgRevokeBadge) returns (MsgRevokeBadgeResponse);
+  rpc UpdateTrustScore(MsgUpdateTrustScore) returns (MsgUpdateTrustScoreResponse);
+  rpc SetVerificationStatus(MsgSetVerificationStatus) returns (MsgSetVerificationStatusResponse);
+  rpc AuthorizeOracle(MsgAuthorizeOracle) returns (MsgAuthorizeOracleResponse);
+  rpc RevokeOracle(MsgRevokeOracle) returns (MsgRevokeOracleResponse);
+  rpc RegisterHandle(MsgRegisterHandle) returns (MsgRegisterHandleResponse);
+}
+
+message MsgCreateProfile {
+  string creator = 1;
+  string name = 2;
+  string bio = 3;
+  string avatar_cid = 4 [ (gogoproto.customname) = "AvatarCID" ];
+  string public_key = 5;
+  map<string, string> social_links = 6;
+}
+message MsgCreateProfileResponse { string address = 1; }
+
+message MsgUpdateProfile {
+  string creator = 1;
+  string name = 2;
+  string bio = 3;
+  string avatar_cid = 4 [ (gogoproto.customname) = "AvatarCID" ];
+  string public_key = 5;
+  map<string, string> social_links = 6;
+}
+message MsgUpdateProfileResponse { string address = 1; }
+
+message MsgAddCredential {
+  string creator = 1;
+  string attestation_uid = 2 [ (gogoproto.customname) = "AttestationUID" ];
+  string credential_type = 3;
+  string title = 4;
+}
+message MsgAddCredentialResponse { string credential_uid = 1 [ (gogoproto.customname) = "CredentialUID" ]; }
+
+message MsgRemoveCredential {
+  string creator = 1;
+  string attestation_uid = 2 [ (gogoproto.customname) = "AttestationUID" ];
+}
+message MsgRemoveCredentialResponse { bool success = 1; }
+
+message MsgVerifySocial {
+  string creator = 1;
+  string platform = 2;
+  string handle = 3;
+  string proof = 4;
+}
+message MsgVerifySocialResponse { 
+  bool verified = 1; 
+  string platform = 2;
+}
+
+message MsgRequestVerification {
+  string creator = 1;
+  string verification_type = 2;
+  string verification_data = 3;
+}
+message MsgRequestVerificationResponse { 
+  string request_id = 1 [ (gogoproto.customname) = "RequestID" ];
+  string status = 2;
+}
+
+message MsgAwardBadge {
+  string authority = 1;
+  string user = 2;
+  string badge_name = 3;
+  string description = 4;
+}
+message MsgAwardBadgeResponse { string badge_id = 1 [ (gogoproto.customname) = "BadgeID" ]; }
+
+message MsgRevokeBadge {
+  string authority = 1;
+  string user = 2;
+  string badge_name = 3;
+}
+message MsgRevokeBadgeResponse { bool success = 1; }
+
+message MsgUpdateTrustScore {
+  string authority = 1;
+  string user = 2;
+  uint64 score = 3;
+  string reason = 4;
+}
+message MsgUpdateTrustScoreResponse { 
+  uint64 old_score = 1; 
+  uint64 new_score = 2; 
+}
+
+message MsgSetVerificationStatus {
+  string authority = 1;
+  string user = 2;
+  bool is_verified = 3;
+}
+message MsgSetVerificationStatusResponse { bool is_verified = 1; }
+
+message MsgAuthorizeOracle {
+  string authority = 1;
+  string oracle = 2;
+}
+message MsgAuthorizeOracleResponse { string oracle = 1; }
+
+message MsgRevokeOracle {
+  string authority = 1;
+  string oracle = 2;
+}
+message MsgRevokeOracleResponse { bool success = 1; }
+
+message MsgRegisterHandle {
+  string creator = 1;
+  string handle = 2;
+}
+message MsgRegisterHandleResponse { string handle = 1; }

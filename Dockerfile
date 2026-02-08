@@ -44,7 +44,7 @@ RUN mkdir -p /root/.certd && chown -R cert:cert /root/.certd
 
 # Set environment variables
 ENV CERT_HOME=/root/.certd
-ENV CHAIN_ID=cert-testnet-1
+ENV CHAIN_ID=cert_4283207343-1
 ENV MONIKER=cert-validator
 
 # Expose ports

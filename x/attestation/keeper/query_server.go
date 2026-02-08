@@ -21,6 +21,9 @@ var _ types.QueryServer = queryServer{}
 
 // Schema queries a schema by UID
 func (k queryServer) Schema(goCtx context.Context, req *types.QuerySchemaRequest) (*types.QuerySchemaResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	schema, err := k.Keeper.GetSchema(ctx, req.Uid)
@@ -35,6 +38,9 @@ func (k queryServer) Schema(goCtx context.Context, req *types.QuerySchemaRequest
 
 // Attestation queries an attestation by UID
 func (k queryServer) Attestation(goCtx context.Context, req *types.QueryAttestationRequest) (*types.QueryAttestationResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	attestation, err := k.Keeper.GetAttestation(ctx, req.Uid)
@@ -49,6 +55,9 @@ func (k queryServer) Attestation(goCtx context.Context, req *types.QueryAttestat
 
 // AttestationsByAttester queries all attestations by an attester
 func (k queryServer) AttestationsByAttester(goCtx context.Context, req *types.QueryAttestationsByAttesterRequest) (*types.QueryAttestationsByAttesterResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	attester, err := sdk.AccAddressFromBech32(req.Attester)
@@ -68,6 +77,9 @@ func (k queryServer) AttestationsByAttester(goCtx context.Context, req *types.Qu
 
 // AttestationsByRecipient queries all attestations for a recipient
 func (k queryServer) AttestationsByRecipient(goCtx context.Context, req *types.QueryAttestationsByRecipientRequest) (*types.QueryAttestationsByRecipientResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	recipient, err := sdk.AccAddressFromBech32(req.Recipient)
@@ -87,6 +99,9 @@ func (k queryServer) AttestationsByRecipient(goCtx context.Context, req *types.Q
 
 // EncryptedAttestation queries an encrypted attestation with access control
 func (k queryServer) EncryptedAttestation(goCtx context.Context, req *types.QueryEncryptedAttestationRequest) (*types.QueryEncryptedAttestationResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	attestation, err := k.Keeper.GetEncryptedAttestation(ctx, req.Uid)
@@ -123,6 +138,9 @@ func (k queryServer) EncryptedAttestation(goCtx context.Context, req *types.Quer
 
 // Stats returns attestation statistics
 func (k queryServer) Stats(goCtx context.Context, req *types.QueryStatsRequest) (*types.QueryStatsResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	return &types.QueryStatsResponse{

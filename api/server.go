@@ -62,7 +62,7 @@ func DefaultConfig() *Config {
 		JWTSecret:       secret,
 		IPFSGateway:     "https://ipfs.c3rt.org",
 		ChainRPCURL:     "http://localhost:26657",
-		ChainID:         "cert-testnet-1",
+		ChainID:         "cert_4283207343-1",
 
 		TxFrom:           "validator",
 		TxKeyringBackend: "test",
@@ -240,6 +240,12 @@ func (s *Server) setupRoutes() {
 
 	// Enterprise Contact (Sales inquiries)
 	api.HandleFunc("/enterprise/contact", s.handleEnterpriseContact).Methods("POST", "OPTIONS")
+
+	// Referral System (Airdrop Points)
+	api.HandleFunc("/referral/code", s.requireAuth(s.handleGetReferralCode)).Methods("GET")
+	api.HandleFunc("/referral/stats", s.requireAuth(s.handleReferralStats)).Methods("GET")
+	api.HandleFunc("/referral/leaderboard", s.handleReferralLeaderboard).Methods("GET")
+	api.HandleFunc("/referral/redeem", s.requireAuth(s.handleRedeemReferral)).Methods("POST", "OPTIONS")
 
 	// Discourse SSO (Community Forum Integration)
 	s.RegisterDiscourseRoutes(api)

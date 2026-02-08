@@ -11,6 +11,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 
+	"github.com/chaincertify/certd/x/certid/client/cli"
 	"github.com/chaincertify/certd/x/certid/keeper"
 	"github.com/chaincertify/certd/x/certid/types"
 )
@@ -64,12 +65,12 @@ func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *r
 
 // GetTxCmd returns the root tx command
 func (AppModuleBasic) GetTxCmd() *cobra.Command {
-	return nil // TODO: Implement CLI commands
+	return cli.GetTxCmd()
 }
 
 // GetQueryCmd returns the root query command
 func (AppModuleBasic) GetQueryCmd() *cobra.Command {
-	return nil // TODO: Implement CLI commands
+	return cli.GetQueryCmd()
 }
 
 // AppModule implements the AppModule interface
@@ -96,7 +97,8 @@ func (am AppModule) RegisterInvariants(ir sdk.InvariantRegistry) {}
 
 // RegisterServices registers module services
 func (am AppModule) RegisterServices(cfg module.Configurator) {
-	// TODO: Register msg and query servers
+	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(am.keeper))
+	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServerImpl(am.keeper))
 }
 
 // InitGenesis initializes genesis state

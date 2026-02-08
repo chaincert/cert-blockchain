@@ -4,9 +4,7 @@
 services:
   # CERT Blockchain Node
   certd:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: certd-node:latest
     container_name: certd
     ports:
       # Tendermint RPC
@@ -24,7 +22,7 @@ services:
     volumes:
       - certd-data:/root/.certd
     environment:
-      - CERT_CHAIN_ID=cert-testnet-1
+      - CERT_CHAIN_ID=cert_4283207343-1
       - CERT_MONIKER=cert-node-1
     networks:
       - cert-network
@@ -67,6 +65,8 @@ services:
     volumes:
       # Allow the API container to run `docker exec certd ...` (used by faucet + dashboard queries)
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mount certd data for faucet keyring access
+      - certd-data:/root/.certd:ro
     environment:
       - DATABASE_URL=postgres://cert:${POSTGRES_PASSWORD:-c3rt_pROd_sEcReT_992834}@postgres:5432/certid?sslmode=disable
       - CHAIN_RPC_URL=http://certd:26657
@@ -80,13 +80,13 @@ services:
 
       # certd tx signing/broadcast (used by POST /api/v1/attestations and POST /api/v1/schemas)
       # Defaults match local docker-compose chain + keyring.
-      - CERT_TX_CHAIN_ID=cert-testnet-1
+      - CERT_TX_CHAIN_ID=cert_4283207343-1
       - CERT_TX_FROM=validator
       - CERT_TX_KEYRING_BACKEND=test
       - CERT_TX_HOME=/root/.certd
-      - CERT_TX_NODE=tcp://localhost:26657
+      - CERT_TX_NODE=tcp://certd:26657
       - CERT_TX_GAS=200000
-      - CERT_TX_FEES=10000ucert
+      - CERT_TX_FEES=50000000ucert
       - CERT_TX_BROADCAST_MODE=block
       # Didit.me KYC Integration
       - DIDIT_API_KEY=${DIDIT_API_KEY:-}
@@ -99,6 +99,8 @@ services:
         condition: service_started
     networks:
       - cert-network
+    dns:
+      - 127.0.0.11
     restart: unless-stopped
 
   # IPFS Node (Optional - for local development)

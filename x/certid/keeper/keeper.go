@@ -21,6 +21,8 @@ type Keeper struct {
 	accountKeeper     types.AccountKeeper
 	bankKeeper        types.BankKeeper
 	attestationKeeper types.AttestationKeeper
+
+	authority string
 }
 
 // NewKeeper creates a new CertID Keeper instance
@@ -29,18 +31,25 @@ func NewKeeper(
 	storeKey storetypes.StoreKey,
 	accountKeeper types.AccountKeeper,
 	bankKeeper types.BankKeeper,
+	authority string,
 ) Keeper {
 	return Keeper{
 		cdc:           cdc,
 		storeKey:      storeKey,
 		accountKeeper: accountKeeper,
 		bankKeeper:    bankKeeper,
+		authority:     authority,
 	}
 }
 
 // SetAttestationKeeper sets the attestation keeper (called after app initialization to avoid circular deps)
 func (k *Keeper) SetAttestationKeeper(ak types.AttestationKeeper) {
 	k.attestationKeeper = ak
+}
+
+// GetAuthority returns the module's authority address
+func (k Keeper) GetAuthority() string {
+	return k.authority
 }
 
 // Logger returns a module-specific logger

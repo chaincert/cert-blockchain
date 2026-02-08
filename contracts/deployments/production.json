@@ -2,9 +2,9 @@
   "network": "cert-production",
   "chainId": "4283207343",
   "contracts": {
-    "CertID": "0x0eD9Ec416f8149d3B0d1124bC6A40E57BBb8B91c"
+    "CertID": "0xBB74d00D1588DF111e9df04DCdf1a3C22Ad7df3a"
   },
-  "deployer": "0x4B8A5Db6687fDdF25f06fd62Fbf8ceF5Bd274301",
-  "timestamp": "2026-01-20T23:00:25.463Z",
-  "txHash": "0xc6cfb829c57e8ed890cd1faf17addfc7116a0e952f6a8b3105504c64f92a9dfc"
+  "deployer": "0xdB632Dda83F09d205EEEa9374CAa6EEbF0230375",
+  "timestamp": "2026-02-05T07:03:00.000Z",
+  "blockNumber": 42
 }

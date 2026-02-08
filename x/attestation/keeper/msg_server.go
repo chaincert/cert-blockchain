@@ -22,6 +22,9 @@ var _ types.MsgServer = msgServer{}
 
 // RegisterSchema handles MsgRegisterSchema
 func (k msgServer) RegisterSchema(goCtx context.Context, msg *types.MsgRegisterSchema) (*types.MsgRegisterSchemaResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	creator, err := sdk.AccAddressFromBech32(msg.Creator)
@@ -59,6 +62,9 @@ func (k msgServer) RegisterSchema(goCtx context.Context, msg *types.MsgRegisterS
 
 // Attest handles MsgAttest for creating public attestations
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	attester, err := sdk.AccAddressFromBech32(msg.Attester)
@@ -111,6 +117,9 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 
 // Revoke handles MsgRevoke for revoking attestations
 func (k msgServer) Revoke(goCtx context.Context, msg *types.MsgRevoke) (*types.MsgRevokeResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	revoker, err := sdk.AccAddressFromBech32(msg.Revoker)
@@ -138,6 +147,9 @@ func (k msgServer) Revoke(goCtx context.Context, msg *types.MsgRevoke) (*types.M
 // CreateEncryptedAttestation handles MsgCreateEncryptedAttestation
 // This is the core privacy feature per Whitepaper Section 3
 func (k msgServer) CreateEncryptedAttestation(goCtx context.Context, msg *types.MsgCreateEncryptedAttestation) (*types.MsgCreateEncryptedAttestationResponse, error) {
+	if goCtx == nil {
+		return nil, nil
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	attester, err := sdk.AccAddressFromBech32(msg.Attester)

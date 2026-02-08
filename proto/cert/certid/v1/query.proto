@@ -1,0 +1,42 @@
+syntax = "proto3";
+package cert.certid.v1;
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "cert/certid/v1/certid.proto";
+
+option go_package = "github.com/chaincertify/certd/x/certid/types";
+
+service Query {
+  rpc Profile(QueryProfileRequest) returns (QueryProfileResponse) {
+    option (google.api.http).get = "/cert/certid/v1/profile/{address}";
+  }
+  rpc ProfileByHandle(QueryProfileByHandleRequest) returns (QueryProfileByHandleResponse) {
+    option (google.api.http).get = "/cert/certid/v1/profile/handle/{handle}";
+  }
+  rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
+    option (google.api.http).get = "/cert/certid/v1/params";
+  }
+}
+
+message QueryProfileRequest {
+  string address = 1;
+}
+
+message QueryProfileResponse {
+  CertID profile = 1;
+}
+
+message QueryProfileByHandleRequest {
+  string handle = 1;
+}
+
+message QueryProfileByHandleResponse {
+  CertID profile = 1;
+}
+
+message QueryParamsRequest {}
+
+message QueryParamsResponse {
+  Params params = 1 [ (gogoproto.nullable) = false ];
+}

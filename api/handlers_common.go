@@ -223,14 +223,25 @@ func (s *Server) handleCreateAttestation(w http.ResponseWriter, r *http.Request)
 		defer cancel()
 
 		var txRes certdTxResponse
+		// Usage: certd tx attestation attest [schema-uid] [data-hex] --recipient [address] [flags]
 		args := []string{"attestation", "attest", req.SchemaUID, dataHex}
+		
 		if recipient != "" {
 			args = append(args, "--recipient", recipient)
 		}
 		if req.ExpirationTime != 0 {
 			args = append(args, "--expiration", fmt.Sprintf("%d", req.ExpirationTime))
 		}
-		args = append(args, "--revocable", fmt.Sprintf("%t", req.Revocable))
+		
+		// Ensure boolean flags are handled correctly for the CLI
+		if req.Revocable {
+			args = append(args, "--revocable")
+		} else {
+			// If not revocable, we might need a specific flag or omission 
+			// checking --help confirms --revocable defaults to true
+			args = append(args, "--revocable=false")
+		}
+		
 		if strings.TrimSpace(req.RefUID) != "" {
 			args = append(args, "--ref-uid", strings.TrimSpace(req.RefUID))
 		}

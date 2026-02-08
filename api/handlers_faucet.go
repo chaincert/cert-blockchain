@@ -155,10 +155,11 @@ set -u
 # Clean up previous run
 rm -f /tmp/unsigned.json /tmp/signed.json /tmp/signing_error.log
 
-# Generate
+# Generate - filter output to extract only the JSON (gas auto prints "gas estimate: X" before JSON)
 certd tx bank send %s %s %sucert \
   --keyring-backend %s --home %s --chain-id %s \
-  --gas %s --fees %s --generate-only > /tmp/unsigned.json 2>/dev/null
+  --node %s --gas auto --gas-adjustment 1.5 --gas-prices 10ucert --generate-only 2>/dev/null | \
+  grep -o '{.*}' > /tmp/unsigned.json
 
 if [ ! -s /tmp/unsigned.json ]; then
   echo "Failed to generate unsigned tx"
@@ -189,7 +190,7 @@ certd tx broadcast /tmp/signed.json \
   --node %s --broadcast-mode sync --output json
 `, s.config.TxFrom, bech32Addr, faucetAmount,
 		s.config.TxKeyringBackend, s.config.TxHome, s.config.ChainID,
-		s.config.TxGas, s.config.TxFees,
+		s.config.TxNode,
 		s.config.TxFrom, s.config.TxKeyringBackend, s.config.TxHome,
 		s.config.ChainID,
 		faucetAccountNum, faucetSequence,

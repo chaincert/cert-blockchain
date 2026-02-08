@@ -6,7 +6,7 @@
 set -ex
 
 # Support both CHAIN_ID and CERT_CHAIN_ID environment variables
-CHAIN_ID="${CERT_CHAIN_ID:-${CHAIN_ID:-cert-testnet-1}}"
+CHAIN_ID="${CERT_CHAIN_ID:-${CHAIN_ID:-cert_4283207343-1}}"
 MONIKER="${CERT_MONIKER:-${MONIKER:-cert-validator}}"
 KEYRING_BACKEND="${KEYRING_BACKEND:-test}"
 HOME_DIR="${HOME_DIR:-/root/.certd}"
