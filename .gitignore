@@ -153,9 +153,9 @@ backup/
 backups/
 
 # ========================================
-# Generated Documentation
+# Documentation
 # ========================================
-# Keep markdown docs, but ignore generated HTML
+*.md
 docs/build/
 site/
 

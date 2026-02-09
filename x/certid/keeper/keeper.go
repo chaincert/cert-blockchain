@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"cosmossdk.io/log"
@@ -116,6 +117,17 @@ func (k Keeper) CreateProfile(ctx sdk.Context, msg *types.MsgCreateProfile) (*ty
 		return nil, err
 	}
 	store.Set(key, bz)
+
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeProfileCreated,
+			sdk.NewAttribute(types.AttributeKeyAddress, msg.Creator),
+			sdk.NewAttribute(types.AttributeKeyName, msg.Name),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+			sdk.NewAttribute(types.AttributeKeyProofHash, k.GenerateProfileProof(ctx, msg.Creator)),
+		),
+	)
 
 	k.Logger(ctx).Info("Profile created", "address", msg.Creator)
 
@@ -324,6 +336,18 @@ func (k Keeper) AwardBadge(ctx sdk.Context, msg *types.MsgAwardBadge) error {
 	}
 	store.Set(types.GetProfileKey(msg.User), bz)
 
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeBadgeAwarded,
+			sdk.NewAttribute(types.AttributeKeyUser, msg.User),
+			sdk.NewAttribute(types.AttributeKeyBadgeName, msg.BadgeName),
+			sdk.NewAttribute(types.AttributeKeyBadgeID, badge.ID),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+			sdk.NewAttribute(types.AttributeKeyProofHash, k.GenerateBadgeProof(ctx, msg.User, badge.ID)),
+		),
+	)
+
 	k.Logger(ctx).Info("Badge awarded", "user", msg.User, "badge", msg.BadgeName)
 
 	return nil
@@ -358,12 +382,26 @@ func (k Keeper) RevokeBadge(ctx sdk.Context, msg *types.MsgRevokeBadge) error {
 	}
 	store.Set(types.GetProfileKey(msg.User), bz)
 
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeBadgeRevoked,
+			sdk.NewAttribute(types.AttributeKeyUser, msg.User),
+			sdk.NewAttribute(types.AttributeKeyBadgeName, msg.BadgeName),
+			sdk.NewAttribute(types.AttributeKeyBadgeID, badge.ID),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+			sdk.NewAttribute(types.AttributeKeyProofHash, k.GenerateBadgeProof(ctx, msg.User, badge.ID)),
+		),
+	)
+
 	k.Logger(ctx).Info("Badge revoked", "user", msg.User, "badge", msg.BadgeName)
 
 	return nil
 }
 
-// UpdateTrustScore updates a user's trust score
+// UpdateTrustScore updates a user's trust score and emits an event for Oracle/EVM relayers.
+// The emitted TrustScoreUpdated event enables WebSocket-based subscriptions from external
+// adapters (e.g., certid-optimism) that bridge score changes to Stylus/Optimism/Arbitrum.
 func (k Keeper) UpdateTrustScore(ctx sdk.Context, msg *types.MsgUpdateTrustScore) error {
 	store := ctx.KVStore(k.storeKey)
 
@@ -387,6 +425,20 @@ func (k Keeper) UpdateTrustScore(ctx sdk.Context, msg *types.MsgUpdateTrustScore
 		return err
 	}
 	store.Set(types.GetProfileKey(msg.User), bz)
+
+	// Emit structured event for the EVM Oracle/Relayer adapter (Oracle Pattern Step A)
+	// The Node.js certid-optimism script subscribes via WebSocket to this event type.
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeTrustScoreUpdated,
+			sdk.NewAttribute(types.AttributeKeyDID, msg.User),
+			sdk.NewAttribute(types.AttributeKeyScore, fmt.Sprintf("%d", msg.Score)),
+			sdk.NewAttribute(types.AttributeKeyOldScore, fmt.Sprintf("%d", oldScore)),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+			sdk.NewAttribute(types.AttributeKeyProofHash, k.GenerateProof(ctx, msg.User, msg.Score)),
+			sdk.NewAttribute(types.AttributeKeyAuthority, msg.Authority),
+		),
+	)
 
 	k.Logger(ctx).Info("Trust score updated", "user", msg.User, "oldScore", oldScore, "newScore", msg.Score)
 
@@ -412,6 +464,17 @@ func (k Keeper) SetVerificationStatus(ctx sdk.Context, msg *types.MsgSetVerifica
 		return err
 	}
 	store.Set(types.GetProfileKey(msg.User), bz)
+
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeVerificationStatusChanged,
+			sdk.NewAttribute(types.AttributeKeyAddress, msg.User),
+			sdk.NewAttribute(types.AttributeKeyIsVerified, fmt.Sprintf("%t", msg.IsVerified)),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+			sdk.NewAttribute(types.AttributeKeyProofHash, k.GenerateProfileProof(ctx, msg.User)),
+		),
+	)
 
 	k.Logger(ctx).Info("Verification status changed", "user", msg.User, "isVerified", msg.IsVerified)
 
@@ -559,6 +622,16 @@ func (k Keeper) AuthorizeOracle(ctx sdk.Context, msg *types.MsgAuthorizeOracle) 
 	}
 	store.Set(types.GetOracleKey(msg.Oracle), bz)
 
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeOracleAuthorized,
+			sdk.NewAttribute(types.AttributeKeyOracle, msg.Oracle),
+			sdk.NewAttribute(types.AttributeKeyAuthority, msg.Authority),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+		),
+	)
+
 	k.Logger(ctx).Info("Oracle authorized", "oracle", msg.Oracle, "by", msg.Authority)
 
 	return nil
@@ -574,6 +647,16 @@ func (k Keeper) RevokeOracle(ctx sdk.Context, msg *types.MsgRevokeOracle) error 
 	}
 
 	store.Delete(oracleKey)
+
+	// Emit event for Oracle/Relayer pattern
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeOracleRevoked,
+			sdk.NewAttribute(types.AttributeKeyOracle, msg.Oracle),
+			sdk.NewAttribute(types.AttributeKeyAuthority, msg.Authority),
+			sdk.NewAttribute(types.AttributeKeyTimestamp, fmt.Sprintf("%d", ctx.BlockTime().Unix())),
+		),
+	)
 
 	k.Logger(ctx).Info("Oracle revoked", "oracle", msg.Oracle, "by", msg.Authority)
 
