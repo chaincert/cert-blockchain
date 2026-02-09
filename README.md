@@ -85,7 +85,7 @@ certd query trustscore get-score "did:cert:123..."`
 
 While this repository hosts the L1 State Machine, the integration with EVM layers (Arbitrum/Optimism) is handled via our external adapter suite.
 
-  -  L2 Integration Layer: certid-evm-adapters
+  -  L2 Integration Layer: [CertID EVM Adapters](https://github.com/chaincert/certid-evm-adapters)
 
      - Contains: Arbitrum Stylus (Rust) and Optimism EAS (Node.js) bridges.
 
