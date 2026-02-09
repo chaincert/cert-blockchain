@@ -103,4 +103,4 @@ We welcome contributions from the DePIN and Cosmos communities.
 
 ⚖️ License
 
-Copyright © 2026 **Cert Blockchain LLC **This project is licensed under the Apache 2.0 License**.
+Copyright © 2026 **Cert Blockchain LLC This project is licensed under the Apache 2.0 License**.
