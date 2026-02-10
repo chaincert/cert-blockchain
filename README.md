@@ -1,106 +1,104 @@
-# CertID Blockchain (Layer 1)
+# CERT Blockchain — Sovereign L1 Protocol
 
-![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue) ![Cosmos SDK](https://img.shields.io/badge/Cosmos%20SDK-v0.50-green) ![License](https://img.shields.io/badge/License-Apache_2.0-blue) ![Status](https://img.shields.io/badge/Status-Testnet%20Alpha-red)
+The Hub of the CERT Ecosystem: a Cosmos SDK L1 blockchain with EVM compatibility, providing hardware-anchored identity, deterministic trust scoring, and decentralized attestations.
 
-**The Sovereign Identity Layer for the Decentralized Physical Economy (DePIN).**
-
-CertID is a specialized Layer 1 blockchain built on the **Cosmos SDK**. It serves as the root of trust for hardware-anchored identities, bridging the gap between physical devices (TEEs) and on-chain reputation.
-
-> **Note:** This is the complete monorepo for the CertID Layer 1 protocol.
-
----
-
-## 📂 Repository Structure
-
-This repository is organized as a monorepo to house the complete blockchain suite:
-
-```text
-├── sdk/                # CORE: The Cosmos SDK Application & Consensus Logic
-│   ├── x/identity      # Module: DID Management & Hardware Anchoring
-│   ├── x/trustscore    # Module: Reputation Scoring Logic
-│   ├── cmd/            # Binary Entrypoints (certd)
-│   └── app/            # App Wiring & Keeper Setup
-├── docs/               # Protocol Specification & Architecture
-└── scripts/            # Local Testnet & Initialization Scripts
-```
-## 🏗 Architecture
-
-CertID operates as a **Sovereign** Hub that handles heavy compute (signature verification, trust scoring) off-chain via Trusted Execution Environments (TEEs) and finalizes the state on-chain.
-Code snippet
+## Architecture
 
 ```mermaid
 graph TD
-    A[Physical Device / TEE] -->|Signed Attestation| B(CertID Validators)
-    B -->|Consensus & Scoring| C{CertID Appchain / SDK}
-    C -->|IBC / GMP| D[External Ecosystems]
-    D -.-> E[Arbitrum]
-    D -.-> F[Optimism]
+    subgraph "The Hub (Cosmos L1)"
+        A[Device TEE] -->|Attestation| B(x/hardware Module)
+        B -->|Calculate| C{Trust Score Logic}
+        C -->|Store| D[State: 89/100]
+        E[CertID Profile] --> F(x/certid Module)
+        G[Attestation Data] --> H(x/attestation Module)
+        C -.->|Humanity Score| I(x/trustscore Module)
+    end
+
+    subgraph "The Spoke (EVM Adapters)"
+        D -.-|Relayer| J[Stylus Contract]
+        J -->|Verify & Cache| K[L2 State: 89/100]
+        L[DePIN DApp] -->|Query| K
+    end
+
+    subgraph "Frontend (cert-web)"
+        M[React Dashboard] -->|Read| D
+        M -->|Read| F
+    end
 ```
 
-## 🚀 Getting Started
-**Prerequisites**
--   **Go:** `1.21+`
+## Modules
 
--  **Make:** Standard build tools
+| Module | Path | Description |
+|--------|------|-------------|
+| **hardware** | `x/hardware/` | Device registration, TEE attestation verification, DePIN device trust scoring |
+| **trustscore** | `x/trustscore/` | Humanity Score calculation, Sybil resistance, anti-bot scoring |
+| **certid** | `x/certid/` | Decentralized Identity (DID) profiles, credential management |
+| **attestation** | `x/attestation/` | On-chain attestation creation, EAS-compatible schemas |
 
-**Installation**
-
-The core application logic resides in the `sdk` directory.
-Bash
+## Project Structure
 
 ```
-# Clone the repository
-git clone [https://github.com/chaincert/cert-blockchain.git](https://github.com/chaincert/cert-blockchain.git)
-cd cert-blockchain
-# Enter the SDK directory
-cd sdk
-# Install the binary
+cert-blockchain/
+├── cmd/certd/          # Chain binary (certd daemon)
+├── app/                # Module wiring and BaseApp configuration
+├── x/                  # Cosmos SDK Modules
+│   ├── hardware/       # Device & TEE Logic
+│   ├── trustscore/     # Humanity Scoring Logic
+│   ├── certid/         # DID Identity Logic
+│   └── attestation/    # Attestation Logic
+├── proto/              # Protobuf Definitions
+│   └── cert/
+│       ├── hardware/   # Device & attestation protos
+│       ├── trustscore/ # Scoring protos
+│       └── certid/     # Identity protos
+├── contracts/          # Solidity smart contracts (CertID, EAS)
+├── sdk/                # JavaScript/TypeScript SDK
+├── api/                # REST API server
+└── docs/               # Documentation & Whitepaper
+```
+
+## Related Repositories
+
+| Repository | Purpose |
+|------------|---------|
+| [certid-evm-adapters](https://github.com/chaincert/certid-evm-adapters) | Arbitrum Stylus verifier, Optimism bridge, Attestation API |
+| cert-web | React frontend dashboard (separate deployment) |
+
+## Build
+
+```bash
+# Build the certd binary
+make build
+
+# Install to $GOPATH/bin
 make install
-# Verify installation
-certd version
+
+# Run unit tests
+make test-unit
+
+# Run all tests
+make test
 ```
 
-**Running a Local Testnet**
+## Chain Configuration
 
-You can spin up a single-node testnet for development purposes using the scripts provided:
-Bash
+| Parameter | Value |
+|-----------|-------|
+| Chain ID | `cert_8888-1` |
+| EVM Chain ID | `8888` |
+| Bond Denom | `ucert` |
+| Bech32 Prefix | `cert` |
+| JSON-RPC | `http://localhost:8545` |
+| CometBFT RPC | `http://localhost:26657` |
 
-```# From the root directory
-./scripts/init.sh
-certd start`
+## Quick Start
+
+```bash
+# Start the node with EVM JSON-RPC enabled
+make start
 ```
-**🛠 Interaction (CLI)**
 
-The `certd` binary provides full interaction with the chain state.
+## License
 
-**1. Create a Hardware-Anchored Identity**
-`Bash
-certd tx identity create-did "did:cert:123..." --pubkey "{"type":"Secp256k1"..."}" --from alice`
-
-**2. Query a Trust Score**
-`Bash
-certd query trustscore get-score "did:cert:123..."`
-
-**🌐 Ecosystem Integration**
-
-While this repository hosts the L1 State Machine, the integration with EVM layers (Arbitrum/Optimism) is handled via our external adapter suite.
-
-  -  L2 Integration Layer: [CertID EVM Adapters](https://github.com/chaincert/certid-evm-adapters)
-
-     - Contains: Arbitrum Stylus (Rust) and Optimism EAS (Node.js) bridges.
-
-**🤝 Contributing**
-
-We welcome contributions from the DePIN and Cosmos communities.
-
-  1.  Fork the repository.
-
-  2.  Create a feature branch.
-
-  3.  **Ensure all core logic changes are made within** `sdk/`.
-
-  4.  Open a Pull Request.
-
-⚖️ License
-
-Copyright © 2026 **Cert Blockchain LLC This project is licensed under the Apache 2.0 License**.
+See [LICENSE](LICENSE) for details.

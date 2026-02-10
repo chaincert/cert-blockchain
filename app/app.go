@@ -87,6 +87,13 @@ import (
 	certidmodule "github.com/chaincertify/certd/x/certid"
 	certidkeeper "github.com/chaincertify/certd/x/certid/keeper"
 	certidtypes "github.com/chaincertify/certd/x/certid/types"
+	hardwaremodule "github.com/chaincertify/certd/x/hardware"
+	hardwarekeeper "github.com/chaincertify/certd/x/hardware/keeper"
+	hardwaretypes "github.com/chaincertify/certd/x/hardware/types"
+
+	trustscoremodule "github.com/chaincertify/certd/x/trustscore"
+	trustscorekeeper "github.com/chaincertify/certd/x/trustscore/keeper"
+	trustscoretypes "github.com/chaincertify/certd/x/trustscore/types"
 
 	// Evmos imports
 	"github.com/evmos/evmos/v20/app/ante"
@@ -127,6 +134,8 @@ var (
 		// Custom CERT modules
 		attestationmodule.AppModuleBasic{},
 		certidmodule.AppModuleBasic{},
+		hardwaremodule.AppModuleBasic{},
+		trustscoremodule.AppModuleBasic{},
 		// Ethermint modules
 		evm.AppModuleBasic{},
 		feemarket.AppModuleBasic{},
@@ -224,6 +233,8 @@ type CertApp struct {
 	// CERT Custom Module Keepers
 	AttestationKeeper attestationkeeper.Keeper
 	CertIDKeeper      certidkeeper.Keeper
+	HardwareKeeper    hardwarekeeper.Keeper
+	TrustScoreKeeper  trustscorekeeper.Keeper
 
 	// New module keepers
 	SlashingKeeper slashingkeeper.Keeper
@@ -395,6 +406,8 @@ func NewCertApp(
 		feemarkettypes.StoreKey,
 		upgradetypes.StoreKey,
 		certidtypes.StoreKey,
+		hardwaretypes.StoreKey,
+		trustscoretypes.StoreKey,
 		// crisistypes.StoreKey, // Disabled - crisis module not in use
 	)
 	tkeys := storetypes.NewTransientStoreKeys(paramstypes.TStoreKey, evmtypes.TransientKey)
@@ -498,6 +511,21 @@ func NewCertApp(
 		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 	)
 	certApp.CertIDKeeper.SetAttestationKeeper(&certApp.AttestationKeeper)
+
+	// Initialize Hardware keeper (DePIN device attestation module)
+	certApp.HardwareKeeper = hardwarekeeper.NewKeeper(
+		appCodec,
+		keys[hardwaretypes.StoreKey],
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+		nil, // CertID keeper cross-reference (wire later)
+	)
+
+	// Initialize TrustScore keeper (Humanity scoring module)
+	certApp.TrustScoreKeeper = trustscorekeeper.NewKeeper(
+		appCodec,
+		keys[trustscoretypes.StoreKey],
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
 
 		// Initialize slashing keeper
 		certApp.SlashingKeeper = slashingkeeper.NewKeeper(
@@ -613,6 +641,8 @@ func NewCertApp(
 		feemarket.NewAppModule(certApp.FeeMarketKeeper, certApp.GetSubspace(feemarkettypes.ModuleName)),
 		upgrade.NewAppModule(certApp.UpgradeKeeper, addressCodec),
 		certidmodule.NewAppModule(certApp.CertIDKeeper),
+		hardwaremodule.NewAppModule(appCodec, certApp.HardwareKeeper),
+		trustscoremodule.NewAppModule(appCodec, certApp.TrustScoreKeeper),
 		// crisis.NewAppModule(appCodec, &certApp.CrisisKeeper, false),
 	)
 
@@ -634,6 +664,8 @@ func NewCertApp(
 		feemarkettypes.ModuleName,
 		upgradetypes.ModuleName,
 		certidtypes.ModuleName,
+		hardwaretypes.ModuleName,
+		trustscoretypes.ModuleName,
 	)
 
 	// Set order for begin/end blockers
@@ -644,6 +676,8 @@ func NewCertApp(
 		attestationtypes.ModuleName,
 		feemarkettypes.ModuleName,
 		evmtypes.ModuleName,
+		hardwaretypes.ModuleName,
+		trustscoretypes.ModuleName,
 	)
 	certApp.ModuleManager.SetOrderEndBlockers(
 			govtypes.ModuleName,
