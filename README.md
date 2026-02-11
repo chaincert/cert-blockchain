@@ -1,27 +1,27 @@
 # CERT Blockchain — Sovereign L1 Protocol
 
-The Hub of the CERT Ecosystem: a Cosmos SDK L1 blockchain with EVM compatibility, providing hardware-anchored identity, deterministic trust scoring, and decentralized attestations.
+The Hub of the CERT Ecosystem: a Cosmos SDK L1 blockchain with EVM compatibility (Ethermint), providing hardware-anchored identity, deterministic trust scoring, and decentralized attestations.
 
 ## Architecture
 
 ```mermaid
 graph TD
-    subgraph "The Hub (Cosmos L1)"
-        A[Device TEE] -->|Attestation| B(x/hardware Module)
-        B -->|Calculate| C{Trust Score Logic}
+    subgraph "The Hub — cert-blockchain (Cosmos L1)"
+        A[Device TEE] -->|Attestation| B(x/hardware)
+        B -->|Score| C{Trust Score Logic}
         C -->|Store| D[State: 89/100]
-        E[CertID Profile] --> F(x/certid Module)
-        G[Attestation Data] --> H(x/attestation Module)
-        C -.->|Humanity Score| I(x/trustscore Module)
+        E[CertID Profile] --> F(x/certid)
+        G[Attestation Data] --> H(x/attestation)
+        C -.->|Humanity Score| I(x/trustscore)
     end
 
-    subgraph "The Spoke (EVM Adapters)"
+    subgraph "The Spoke — certid-evm-adapters"
         D -.-|Relayer| J[Stylus Contract]
         J -->|Verify & Cache| K[L2 State: 89/100]
         L[DePIN DApp] -->|Query| K
     end
 
-    subgraph "Frontend (cert-web)"
+    subgraph "Frontend — cert-web"
         M[React Dashboard] -->|Read| D
         M -->|Read| F
     end
@@ -40,29 +40,38 @@ graph TD
 
 ```
 cert-blockchain/
-├── cmd/certd/          # Chain binary (certd daemon)
-├── app/                # Module wiring and BaseApp configuration
-├── x/                  # Cosmos SDK Modules
-│   ├── hardware/       # Device & TEE Logic
-│   ├── trustscore/     # Humanity Scoring Logic
-│   ├── certid/         # DID Identity Logic
-│   └── attestation/    # Attestation Logic
-├── proto/              # Protobuf Definitions
+├── cmd/
+│   ├── certd/              # Chain daemon binary
+│   └── api/                # API server binary
+├── app/                    # BaseApp wiring, genesis, ante handlers, EVM config
+├── x/                      # Cosmos SDK Modules
+│   ├── hardware/           # Device & TEE logic
+│   ├── trustscore/         # Humanity scoring logic
+│   ├── certid/             # DID identity logic
+│   └── attestation/        # Attestation logic
+├── proto/                  # Protobuf definitions
 │   └── cert/
-│       ├── hardware/   # Device & attestation protos
-│       ├── trustscore/ # Scoring protos
-│       └── certid/     # Identity protos
-├── contracts/          # Solidity smart contracts (CertID, EAS)
-├── sdk/                # JavaScript/TypeScript SDK
-├── api/                # REST API server
-└── docs/               # Documentation & Whitepaper
+│       ├── hardware/v1/    # Device & attestation protos
+│       └── trustscore/v1/  # Scoring protos
+├── api/                    # REST API server (handlers, middleware, database)
+├── contracts/              # Solidity smart contracts (CertID, EAS, Bridge)
+├── sdk/                    # JavaScript/TypeScript SDK (@chaincertify/sdk)
+├── services/               # Integration services (also in certid-evm-adapters)
+│   ├── attestation-api/    # Encrypted attestation REST API
+│   ├── bridge-validator/   # Cross-chain bridge validator
+│   └── stylus-verifier/    # Arbitrum Stylus TEE verifier (Rust/WASM)
+├── scripts/                # Deployment & utility scripts
+├── config/                 # Node configuration (app.toml)
+├── test-node/              # Local testnet node config & genesis
+├── tests/                  # Integration tests
+└── dapps/                  # Example dApps
 ```
 
 ## Related Repositories
 
 | Repository | Purpose |
 |------------|---------|
-| [certid-evm-adapters](https://github.com/chaincert/certid-evm-adapters) | Arbitrum Stylus verifier, Optimism bridge, Attestation API |
+| [certid-evm-adapters](https://github.com/chaincert/certid-evm-adapters) | Arbitrum Stylus verifier, bridge validator, attestation API |
 | cert-web | React frontend dashboard (separate deployment) |
 
 ## Build
@@ -79,16 +88,20 @@ make test-unit
 
 # Run all tests
 make test
+
+# Build Go packages (verify compilation)
+go build ./cmd/... ./app/... ./x/...
 ```
 
 ## Chain Configuration
 
 | Parameter | Value |
 |-----------|-------|
-| Chain ID | `cert_8888-1` |
-| EVM Chain ID | `8888` |
+| Chain ID (Cosmos) | `cert_4283207343-1` |
+| Chain ID (EVM) | `4283207343` |
 | Bond Denom | `ucert` |
 | Bech32 Prefix | `cert` |
+| Go Module | `github.com/chaincertify/certd` |
 | JSON-RPC | `http://localhost:8545` |
 | CometBFT RPC | `http://localhost:26657` |
 
